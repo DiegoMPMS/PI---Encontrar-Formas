@@ -30,3 +30,7 @@ int img_end [2] = [img_x + 1, img_y + 1];
   se o ponto central for 1 e e pelo menos um vizinho é 0 o resultado é 1 ou seja => 1;
 */
 int edge_mask [3][3] = {{-1 , -1 , -1}, {-1 , 9 , -1}, {-1 , -1 , -1}};
+
+// TO-DO escolher entre one-liner e matriz para o filtro.
+// TO-DO função que percorre a imagem e encontra as "sementes" das formas
+// TO-DO estrutura que armazena as fórmas. 
