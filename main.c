@@ -3,8 +3,9 @@ include <stdio.h>;
 // ------------------- VARIAVEIS / CONSTANTES ----------------------------------
 int img_x = 0;
 int img_y = 0;
-int* original_img;
-int* filtered_img;
+int line_size = 0;
+unsigned int* original_img;
+unsigned int* filtered_img;
 // origin e end são para as operações trabalharem apenas sobre a imagem e não terem que percorrer a borda
 int img_start_x = 1;
 int img_start_y = 1;
@@ -124,21 +125,48 @@ int open_img (string file_name){
   agrupando 32 bits em um int ela ocuparia apenas 11.9 megabytes ("pequena diferença")
   a imagem maxima suportada nesse código tem n pixels onde n é o maior tamanho possivel de um int,
   tal imagem ocuparia 8gigas de ram (desperdico) ou 255megas (agrupado).
+
+  utilizando o agrupamento de bits em inteiros, nós teremeos o vetor:
+    original_img[(img_x/32)+(1*(img_x%32 != 0))][img_y]
+    ou seja o número de colunas da imgagem n inteiros onde n = res_x/32 e caso a divisão não seja exata
+    ele irá adicionar mais um inteiro que será parcialmente preenchido.
+    sendo assim é de vital importancia guardar o tamanho da imagem original.
   */
   //+2 é o padding de pixels brancos em volta da imagem para facilitar aplicação do filtro
-  int pixels = ((img_x+2) * (img_y+2);
-  original_img = (int*)malloc(sizeof(int)*pixels);
+  line_size = ((img_x+2/32)+(1*(img_x+2%32 != 0)));
+  int size = ( line_size * img_y+2);
+  original_img = (int*)malloc(sizeof(int)*size);
+  /*
+   C é sofrimento, como a matriz que descreve a imgem tem seu tamanho declarado durante execução
+   ela é na verdade um array 1D, ou seja devemos prestar atenção na gora de acessar.
+   e não podemos acessar como img[x][y] temos que acessar img[y*line_size + x]
+   !!!! IMPORTENTE COMO PADRÃO PARA ESSE PROJETO O VETOR 1D QUE ARMAZENA A IMAGEM
+   É DO TIPO [Y][X], ONDE Y É A LINHA E X A COLUNA, DESSA FORMA AO ACESSAR O VETOR 1D
+   TEMOS QUE MULTIPLICAR A POSIÇÃO DA LINHA PELO NÚMERO DE INTEIROS POR LINHA, PARA FACILIAR ESSE
+   VALOR SERÁ UMA VÁRIAVEL DECLARADA NO COMEÇO DO CÓDIO.
+   img[y*line_size + x] = img[y][x]
+   onde y é o número de linhas e x é o número de colunas
+  */
   if (!original_img){
     fprintf(stderr, "ERROR: incapaz de alocar memória\n", );
     exit(1)
   }
+  //após alocação toda a matriz é preenchida com 0.
+  memset(original_img, 0, size);
 
-  for (i = 0; i <= img_x; i++){
+  for (i = 1; i <= img_y; i++){
     c = getc(fp);
+    int x_pos = 1; // inicia em um para que a 1ª coluna seja completamente 0
+    //esse while percorre uma linha por vez do arquivo.
     while ((c != '\n') && (c =! ' '){
-      //TO-DO parse char from file inte a bit than group 32 bits int an int
-    };
-
+      if (c == '1'){
+        //a linha abaixo usa operações de bitshift para manipular os bits dentro de um inteiro.
+         original_img[i*line_size + k/32] |= 1 << (k%32);
+         x_pos++;
+       }else{
+         x_pos++;
+       }
+    c = getc;
+    }
   }
-
-  }
+}
