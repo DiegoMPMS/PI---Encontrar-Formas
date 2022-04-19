@@ -3,14 +3,13 @@ include <stdio.h>;
 // ------------------- VARIAVEIS / CONSTANTES ----------------------------------
 int img_x = 0;
 int img_y = 0;
-// +2 é um "padding" de 0 na borda para facilitar a apliação dos filtros
-int original_img[img_x+2][img_y+2];
-int filtered_img[img_x+2][img_y+2];
+int* original_img;
+int* filtered_img;
 // origin e end são para as operações trabalharem apenas sobre a imagem e não terem que percorrer a borda
 int img_start_x = 1;
 int img_start_y = 1;
-int img_end_x = img_x + 1;
-int img_end_y = img_y + 1;
+int img_end_x = 0 // img_x + 1;
+int img_end_y = 0 //img_y + 1;
 /*
   Essa mascara de detecção de bordas simples funciona apenas para imagens preto e branco,
   seu funcionamento é bem simples:
@@ -37,15 +36,17 @@ int img_end_y = img_y + 1;
   ignorando os cantos na aplicação da mascara será impossivel a formação de "L" isso quer dizer que após aplicação do filtro
   em um espaço 3x3 poderão existir apenas 3 pixeis pretos, e eles deverão tocar pelo menos dois lados opostos dese quadrado
   dessa forma basta saber sua posição atual, sua ultiama posição e a partir dai procurar a ultima posição.
+
+  int edge_mask [3][3] = {{0 , -1 , 0}, {-1 , 4 , -1}, {0 , -1 , 0}};
+
 */
-int edge_mask [3][3] = {{0 , -1 , 0}, {-1 , 4 , -1}, {0 , -1 , 0}};
 // ------------------- FUNÇÔES -------------------------------------------------
 // TO-DO escolher entre one-liner e matriz para o filtro. 18/04/22 => ONE-LINER
 int apply_mask (cord_x, cord_y){
-  return img[cord_x][cord_y] - (img[cord_x -1][cord_y] * img[cord_x+1][cord_y]
-                                * img[cord_x][cord_y-1] * img[cord_x][cord_y+1])
+  return (original_img[cord_x][cord_y] - (original_img[cord_x -1][cord_y] * original_img[cord_x+1][cord_y] * original_img[cord_x][cord_y-1] * original_img[cord_x][cord_y+1]));
 };
-// TO-DO função que percorre a imagem e encontra as "sementes" das formas
+
+// função que percorre a imagem e encontra as "sementes" das formas
 void find_seed () {
   /*
   função apenas para lustração, pois ela percorre a imagem que ela não recebe como parametro.
@@ -66,5 +67,78 @@ void find_seed () {
       }
     }
   }
-};
-// TO-DO estrutura que armazena as fórmas.
+}
+
+// ABRIR ARQUIVO E PASSAR PARA VETOR DE INT()
+int open_img (string file_name){
+  FILE *fp;
+  int c;
+  char formato[3];
+  // PASSOS 1-abrir arquivo, 2-verificar formato, 3-verificar se é BW (P1), 4-descobrir tamanho, 5-passar para matriz
+  // PASSO 1
+  fp = fopen(file_name, "r");
+  if (fp == NULL){
+    perror("Erro ao abrir arquivo, certifique-se de que o nome do arquivo foi inserido corretamente.");
+    exit(1);
+  }
+  //PASSO 2
+  if (!fgets(formato, sizeof(formato), fp)){
+    perror("ERROR: Arquivo %s formatado incorretamente, por favor fornecer um arquivo PBM.");
+    exit(1);
+  }
+  //PASSO 3
+  if (formato[0] != P || formato[1] != 1){
+    fprintf(stderr, "ERRO: imagem não se encontra no formato P1 (Preto e Branco)\n");
+    exit(1);
+  }
+  //PASSO 3.1 - ignorar comentários
+  c = getc(fp);
+  /*
+  1 - lê a stream (1ª linha já foi removida no passo anterior, ela contem o formato)
+  2 - c == "#" verifica se a linha é um comentário.
+  3 - getc(fp) !=  '\n' é usado para ignorar todos os comentŕios e percorrer a stream.
+  4 - c = getc(fp), lê a proxima linha e o ciclo continua.
+  5 - usar um ungetc(c, fp) para devolver o ultimo valor pois esse loop
+      precisa achar o primeiro valor não comtário.
+  */
+  while (c == "#"){
+    while (getc(fp) != '\n');
+    c = getc(fp);
+  }
+  ungetc (c, fp);
+
+  //PASSO 4
+  if(scanf(fp, "%d %d", img_x, img_y) != 2){
+    fprintf(stderr, "ERRO: problema ao ler tamamho da imagem\n");
+    exit(1);
+  }
+
+  //PASSO 5
+  img_end_x = img_x + 1;
+  img_end_y = img_y + 1;
+  /*
+  C não suporta um array de bits, podemos desperdiçar 31bits de espaço e armazenar cada pixel como uma int.
+  ou podemos agrupar 32 pixels em um int, o que reduz MUITO o espaço necessário,
+  mas consume muito mais da minha paciencia.
+  desperdiçãndo espaço uma img de 10.000x10.000 pixels ocuparia aprox 381 megabytes,
+  agrupando 32 bits em um int ela ocuparia apenas 11.9 megabytes ("pequena diferença")
+  a imagem maxima suportada nesse código tem n pixels onde n é o maior tamanho possivel de um int,
+  tal imagem ocuparia 8gigas de ram (desperdico) ou 255megas (agrupado).
+  */
+  //+2 é o padding de pixels brancos em volta da imagem para facilitar aplicação do filtro
+  int pixels = ((img_x+2) * (img_y+2);
+  original_img = (int*)malloc(sizeof(int)*pixels);
+  if (!original_img){
+    fprintf(stderr, "ERROR: incapaz de alocar memória\n", );
+    exit(1)
+  }
+
+  for (i = 0; i <= img_x; i++){
+    c = getc(fp);
+    while ((c != '\n') && (c =! ' '){
+      //TO-DO parse char from file inte a bit than group 32 bits int an int
+    };
+
+  }
+
+  }
