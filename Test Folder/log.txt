@@ -1,0 +1,7 @@
+X: 500 -- Y: 500
+line size = 16
+total size = 8032 integers
+0
+Load demorou: 0.003749 segundos
+0
+Save demorou: 0.008662 segundos

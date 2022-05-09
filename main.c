@@ -104,7 +104,7 @@ int open_img (char *file_name){
   char formato[4];
   // PASSOS 1-abrir arquivo, 2-verificar formato, 3-verificar se é BW (P1), 4-descobrir tamanho, 5-passar para matriz
   // PASSO 1
-  fp = fopen(file_name, "r");
+  fp = fopen(file_name, "rb");
   if (fp == NULL){
     perror("Erro ao abrir arquivo, certifique-se de que o nome do arquivo foi inserido corretamente.\n");
     exit(1);
