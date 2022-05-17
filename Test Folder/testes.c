@@ -31,8 +31,8 @@ typedef struct stack Stack;
 typedef Stack *stackPtr;
 // start e end são para as operações trabalharem apenas sobre a Imagem e não terem que percorrer a borda
 Imagem *img0;
-unsigned int *shape_map;
-unsigned int *grupos;
+unsigned int formas_count = 0;
+unsigned int buracos_count = 0;
 // start e end são para as operações trabalharem apenas sobre a Imagem e não terem que percorrer a borda
 // ------------------- FUNÇÔES -------------------------------------------------
 // ABRIR ARQUIVO E PASSAR PARA VETOR DE INT()
@@ -195,7 +195,7 @@ int save_img (char *file_name, Imagem *img, char *c1, char *c2){
   return 0;
 }
 
-void push( stackPtr *top, int x , int y){
+void push (stackPtr *top, int x , int y){
     stackPtr nodePtr;
 
     nodePtr = malloc(sizeof(Stack));
@@ -231,15 +231,19 @@ int find_shape (Imagem *img) {
   unsigned int index_count = 1;
   unsigned int colunas = img->size_x + 2;
   unsigned int linhas = img->size_y + 2;
+  unsigned int *shape_map;
   stackPtr links = NULL;
+  unsigned int *grupos;
+
 
   shape_map = (unsigned int*)malloc(linhas * colunas * sizeof(unsigned int));
   if (!shape_map) {
        fprintf(stderr, "Erro ao alocar Memória para busca de formas.\n");
        exit(1);
 }
-  memset (shape_map, 0, (linhas*colunas*sizeof(unsigned int)));
+  memset(shape_map, 0, (linhas*colunas*sizeof(unsigned int)));
 
+  //varrendo a imagem e agrupando os pixels
   for (y_pos = img->start_y; y_pos < img->end_y; y_pos++){
     for (x_pos = img->start_x; x_pos < img->end_x; x_pos++){
       unsigned int i = TestBit(img->data, ((y_pos*img->line_size*32) + x_pos));
@@ -268,17 +272,146 @@ int find_shape (Imagem *img) {
     }
   }
 
-  stackPtr temp = links;
+  //converter pilha em vetor de associados
   grupos = (unsigned int*)malloc(index_count* sizeof(unsigned int));
-  memset (grupos, 0, index_count*sizeof(unsigned int));
-  while (temp != NULL) {
+  memset(grupos, 0, (index_count*sizeof(unsigned int)));
+  while (links != NULL) {
     Tupla t_temp;
-    t_temp = pop(&temp);
+    t_temp = pop(&links);
     grupos [t_temp.b] = t_temp.a;
   }
-  for (int i = 0; i < index_count; i++){
-    printf("(%d->%d) ", i, grupos[i]);
+
+  //reorganizar grupos
+  printf("Grupos Finais: \n");
+  for (int i = index_count-1; i > 0; i--){
+    unsigned int associado = grupos[i];
+    unsigned int last_associado = grupos[i];
+    while (associado){
+      last_associado = associado;
+      associado = grupos[associado];
+    }
+    grupos[i]=last_associado;
+    if (!grupos[i]){
+      formas_count++;
+      printf("%d - ", i);
+    }
   }
+  printf("\n");
+
+  //ler o vetor de associados e alterar os valores em shape_map
+  for (y_pos = img->start_y; y_pos < img->end_y; y_pos++){
+    for (x_pos = img->start_x; x_pos < img->end_x; x_pos++){
+      unsigned int g_value = shape_map[(y_pos*colunas)+x_pos];
+        if (grupos[g_value]){
+          shape_map[(y_pos*colunas)+x_pos] = grupos[g_value];
+        }
+      //printf("%d ",shape_map[(y_pos*colunas)+x_pos]);
+    }
+    //printf("\n");
+  }
+
+  free(shape_map);
+  free(grupos);
+  free(links);
+  return 0;
+}
+
+int find_hole (Imagem *img) {
+  unsigned int x_pos;
+  unsigned int y_pos;
+  unsigned int index_count = 1;
+  unsigned int colunas = img->size_x + 2;
+  unsigned int linhas = img->size_y + 2;
+  unsigned int *hole_map;
+  stackPtr links = NULL;
+  unsigned int *grupos;
+
+  hole_map = (unsigned int*)malloc(linhas * colunas * sizeof(unsigned int));
+  memset(hole_map, 0, (linhas*colunas*sizeof(unsigned int)));
+
+  //varrendo a imagem e agrupando os pixels
+  for (y_pos = img->start_y; y_pos < img->end_y; y_pos++){
+    for (x_pos = img->start_x; x_pos < img->end_x; x_pos++){
+      unsigned int i = TestBit(img->data, ((y_pos*img->line_size*32) + x_pos));
+      unsigned int r = TestBit(img->data, (((y_pos-1)*img->line_size*32) + x_pos));
+      unsigned int t = TestBit(img->data, ((y_pos*img->line_size*32) + (x_pos-1)));
+      unsigned int g_r = hole_map[((y_pos-1)*colunas)+x_pos];
+      unsigned int g_t = hole_map[((y_pos)*colunas)+(x_pos-1)];
+      //TO-DO RE IMPLEMENTAR PARA PROCURAR POR 0
+      if (i==0){
+        if ((r==0) && (t==0)){
+          if ((g_r == g_t) && g_r != 0){
+            hole_map[(y_pos*colunas)+x_pos] = g_r;
+          } else if ((g_r != g_t) && g_r != 0){
+              hole_map[(y_pos*colunas)+x_pos] = g_r;
+              push(&links, g_r, g_t);
+          } else{
+            hole_map[(y_pos*colunas)+x_pos] = index_count;
+            index_count++;
+          }
+        }else if ((r==0) && (g_r !=0)){
+          hole_map[(y_pos*colunas)+x_pos] = g_r;
+        }else if ((t==0) && (g_t != 0)){
+          hole_map[(y_pos*colunas)+x_pos] = g_t;
+        }else {
+          hole_map[(y_pos*colunas)+x_pos] = index_count;
+          index_count++;
+        }
+      }
+    }
+  }
+
+  //converter pilha em vetor de associados
+  grupos = (unsigned int*)malloc(index_count* sizeof(unsigned int));
+  for (int i = index_count; i > 0; i--){
+    grupos[i] = 0;
+  }
+  while (links != NULL) {
+    Tupla t_temp;
+    t_temp = pop(&links);
+    grupos [t_temp.b] = t_temp.a;
+  }
+  for (int i = index_count-1; i > 0; i--){
+    printf("(%d->%d)", i, grupos[i]);
+  }
+  printf("\n");
+  //reorganizar grupos
+  printf("Grupos Finais Buracos: \n");
+  for (int i = index_count-1; i > 0; i-- ){
+    unsigned int associado = grupos[i];
+    unsigned int last_associado = grupos[i];
+    while (associado){
+      last_associado = associado;
+      associado = grupos[associado];
+    }
+    grupos[i]=last_associado;
+    if (!grupos[i]){
+      buracos_count++;
+      printf("%d - ", i);
+    }
+  }
+  printf("\n");
+
+  //ler o vetor de associados e alterar os valores em shape_map
+  for (y_pos = img->start_y; y_pos < img->end_y; y_pos++){
+    for (x_pos = img->start_x; x_pos < img->end_x; x_pos++){
+      unsigned int g_value = hole_map[(y_pos*colunas)+x_pos];
+      //printf("%d ", g_value);
+        if (grupos[g_value]){
+          hole_map[(y_pos*colunas)+x_pos] = grupos[g_value];
+        }
+      printf("%d ",hole_map[(y_pos*colunas)+x_pos]);
+    }
+    printf("\n");
+  }
+
+  for (int i = index_count-1; i > 0; i--){
+    printf("(%d->%d)", i, grupos[i]);
+  }
+  printf("\n");
+  free(hole_map);
+  free(grupos);
+  free(links);
   return 0;
 }
 // ------------------- MAIN ----------------------------------------------------
@@ -291,6 +424,23 @@ int main(int argc, char const *argv[]) {
   t = clock() - t;//"Stop Clock"
   elapsed_clocks = ((double)t)/CLOCKS_PER_SEC; //"Math"
   printf("Load demorou: %f segundos\n", elapsed_clocks);
+  printf("-------------------------------------------\n");
+
+  t = clock(); //"Start clock"
+  printf("Img find_shape result: %d\n", find_shape(img0));//Load
+  t = clock() - t;//"Stop Clock"
+  elapsed_clocks = ((double)t)/CLOCKS_PER_SEC; //"Math"
+  printf("Busca por formas demorou: %f segundos\n", elapsed_clocks);
+  printf("Total de formas Encontradas: %d\n", formas_count);
+  printf("-------------------------------------------\n");
+
+  t = clock(); //"Start clock"
+  printf("Img find_hole result: %d\n", find_hole(img0));//Load
+  t = clock() - t;//"Stop Clock"
+  elapsed_clocks = ((double)t)/CLOCKS_PER_SEC; //"Math"
+  printf("Busca por buracos demorou: %f segundos\n", elapsed_clocks);
+  printf("Total de buracos Encontrados: %d\n", buracos_count);
+  printf("-------------------------------------------\n");
 
   t = clock(); //"Start clock"
   printf("Img Save result: %d\n", save_img("copia.pbm", img0, "nada", "algo"));
@@ -298,11 +448,6 @@ int main(int argc, char const *argv[]) {
   elapsed_clocks = ((double)t)/CLOCKS_PER_SEC; //"Math"
   printf("Save demorou: %f segundos\n", elapsed_clocks);
 
-  t = clock(); //"Start clock"
-  printf("Img find_shape result: %d\n", find_shape(img0));//Load
-  t = clock() - t;//"Stop Clock"
-  elapsed_clocks = ((double)t)/CLOCKS_PER_SEC; //"Math"
-  printf("Busca por formas demorou: %f segundos\n", elapsed_clocks);
   free(img0);
   return 0;
 }
