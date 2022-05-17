@@ -1,0 +1,85 @@
+#define SetBit(A,x,y)  (a*(x+y))
+#define TestBit(A,x,y)  (a*(x-y))
+
+typedef struct{
+  int size_x;
+  int size_y;
+  int start_x;
+  int start_y;
+}Imagem
+
+typedef struct{
+  Tupla *t1;
+  struct Pilha* next;
+} S_node;
+
+typedef struct{
+  unsigned int index_a;
+  unsigned int index_b;
+} Tupla
+
+void find_shape (Imagem *img) {
+  unsigned int pos_x;
+  unsigned int pos_y;
+  unsigned int *shape_map;
+  unsigned int index_count;
+  unsigned int row_size = img->size_x + 2;
+  unsigned int lines = img->size_y + 2;
+  S_node *links = NULL;
+
+  unsigned int *shape_map = malloc(lines * row_size * sizeof(unsigned int));
+  memset (shape_map, 0, sizeof(shape_map));
+
+  for (pos_y = img->start_y; pos_y <= img->end_y; pos_y++){
+    for (pos_x = img->start_y; pos_x <= img->end_x; pos_x++){
+      int i = TestBit(img, pos_x, pos_y);
+      int r = TestBit(img, pos_x, pos_y);
+      int t = TestBit(img, (pos_x-1), pos_y);
+      int g_r = shape_map[((pos_y-1)*row_size)+pos_x];
+      int g_t = shape_map[((pos_y)*row_size)+pos_x-1];
+
+      if (i){
+        if (r*t){
+          if (g_r == g_t]){
+            shape_map[(pos_y*row_size)+pos_x] = g_r;
+          } else {
+              shape_map[(pos_y*row_size)+pos_x] = g_r;
+              Tupla *t_temp = malloc(sizeof(Tupla));
+              t_temp->index_a = g_r;
+              t_temp->index_b = g_t;
+              push(links, t_temp);
+          }
+        }else if (r){
+          shape_map[(pos_y*row_size)+pos_x] = g_r;
+        }else if (t){
+          shape_map[(pos_y*row_size)+pos_x] = g_t;
+        }else {
+          shape_map[(pos_y*row_size)+pos_x] = index_count;
+          index_count++;
+        }
+      }
+
+    }
+  }
+}
+
+void push(S_node *stack , Tupla *data){
+    S_node *temp = malloc(sizeof(S_node));
+    temp->t1 = data;
+    temp->next = stack;
+    stack = temp;
+    free(temp);
+}
+
+Tupla pop (S_node *stack){
+  if (top == NULL){
+    return 0;
+  } else {
+    S_node *temp;
+    temp = stack;
+    stack = stack->next;
+    Tupla t_out = temp->t1;
+    free(temp);
+    return t_out;
+  }
+}

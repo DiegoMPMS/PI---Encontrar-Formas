@@ -1,7 +1,9 @@
-X: 500 -- Y: 500
-line size = 16
-total size = 8032 integers
-0
-Load demorou: 0.003749 segundos
-0
-Save demorou: 0.008662 segundos
+X: 100 -- Y: 100
+line size = 4
+total img size = 408 integers
+Img Open result: 0
+Load demorou: 0.000625 segundos
+Img Save result: 0
+Save demorou: 0.000965 segundos
+(0->0) (1->0) (2->0) (3->4) (4->0) (5->0) (6->5) (7->6) (8->3) (9->7) (10->0) (11->10) (12->9) (13->11) (14->18) (15->14) (16->0) (17->16) (18->17) (19->14) (20->14) (21->20) Img find_shape result: 0
+Busca por formas demorou: 0.000548 segundos

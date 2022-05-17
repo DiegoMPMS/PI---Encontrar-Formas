@@ -1,7 +1,0 @@
-X: 1000 -- Y: 1000
-line size = 32
-total size = 32064 integers
-0
-Load demorou: 0.020053 segundos
-0
-Save demorou: 0.026532 segundos

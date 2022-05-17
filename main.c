@@ -2,9 +2,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#define SetBit(A,k) ( A[(k/32)] |= (1 << (k%32)) )
-#define ClearBit(A,k) ( A[(k/32)] &= ~(1 << (k%32)) )
-#define TestBit(A,k) ( A[(k/32)] & (1 << (k%32)) )
+#include <time.h>
+#define SetBit(A,k) ( A[(k/32)] |= (1 << (k%32)) ) // lembrete k = ((y_pos*line_size*32) + x_pos)
+#define ClearBit(A,k) ( A[(k/32)] &= ~(1 << (k%32)) ) // lembrete k = ((y_pos*line_size*32) + x_pos)
+#define TestBit(A,k) ( A[(k/32)] & (1 << (k%32)) ) // lembrete k = ((y_pos*line_size*32) + x_pos)
 // ------------------- VARIAVEIS / CONSTANTES ----------------------------------
 int img_x = 0;
 int img_y = 0;
@@ -14,8 +15,8 @@ unsigned int* filtered_img;
 // origin e end são para as operações trabalharem apenas sobre a imagem e não terem que percorrer a borda
 int img_start_x = 1;
 int img_start_y = 1;
-int img_end_x = 0 // img_x + 1;
-int img_end_y = 0 //img_y + 1;
+int img_end_x = 0; // img_x + 1
+int img_end_y = 0; //img_y + 1
 /*
   Essa mascara de detecção de bordas simples funciona apenas para imagens preto e branco,
   seu funcionamento é bem simples:
@@ -161,8 +162,10 @@ int open_img (char *file_name){
     sendo assim é de vital importancia guardar o tamanho da imagem original.
   */
   //+2 é o padding de pixels brancos em volta da imagem para facilitar aplicação do filtro
-  line_size = ((img_x+2/32)+(1*(img_x+2%32 != 0)));
-  int size = ( line_size * img_y+2);
+  line_size = (((img_x+2)/32)+(1*(((img_x+2)%32) != 0)));
+  printf("line size = %d\n", line_size );
+  int size = ( line_size * (img_y+2));
+  printf("total size = %d integers\n", size);
   original_img = (unsigned int*)malloc(sizeof(unsigned int)*size);
   /*
    C é sofrimento, como a matriz que descreve a imgem tem seu tamanho declarado durante execução
@@ -183,20 +186,61 @@ int open_img (char *file_name){
   memset(original_img, 0, size);
 
   int y_pos;
+  int x_pos;
   for (y_pos = 1; y_pos <= img_y; y_pos++){
-    c = getc(fp);
-    int x_pos = 1; // inicia em um para que a 1ª coluna seja completamente 0
-    //esse while percorre uma linha por vez do arquivo.
-    while ((c != '\n') && (c =! ' ')){
-      if (c == '1'){
-        //a linha abaixo usa operações de bitshift para manipular os bits dentro de um inteiro.
-         SetBit(original_img, (y_pos*line_size + x_pos));
-         x_pos++;
-       }else{
-         x_pos++;
-       }
-    c = getc(fp);
+    x_pos = 1; // reset da variavel.
+    while (x_pos <= img_end_x) {
+      c = getc(fp);
+      if (c == 10 || c == 20){
+
+      }else{
+        if (c == 49){
+          SetBit(original_img, ((y_pos*line_size*32) + x_pos));
+        }
+      x_pos++;
+      }
     }
   }
+
+  fclose(fp);
   return 0;
 }
+
+int save_img (char *file_name, unsigned int *img, char *c1, char *c2){
+  // "wb" tenta abrir/criar o arquivo e sobrescreve o conteudo.
+  FILE *fp;
+  fp = fopen(file_name, "wb");
+  if (!fp){
+    fprintf(stderr, "Erro ao salvar arquivo: %s\n", file_name);
+    exit(1);
+  }
+  //Formato
+  fprintf(fp, "P1\n");
+  //Comentário
+  fprintf(fp, "# Projeto PI 2021.2 - Grupo: Diego, Feliep, Luan.\n");
+  fprintf(fp, "# %s\n",c1 ); //c1 = X Formas Encontradas.
+  fprintf(fp, "# %s\n",c2 ); //c2 = X Buracos Encontrados.
+  //tamanho
+  int t_x = img_end_x-img_start_x;
+  int t_y = img_end_y-img_start_y;
+  fprintf(fp, "%d %d\n",t_x, t_y); //
+
+  //LoooooooooooooooooooooP
+  int y_pos;
+  int x_pos;
+  for (y_pos = 1; y_pos <= img_end_y; y_pos++){
+    for (x_pos = 1; x_pos <= img_end_x; x_pos++){
+      if (TestBit(original_img, ((y_pos*line_size*32) + x_pos))){
+        putc(49, fp);
+      }else {
+        putc(48, fp);
+      }
+    }
+    putc('\n', fp);
+  }
+  fclose(fp);
+
+  return 0;
+}
+
+// ------------------- MAIN ----------------------------------------------------
