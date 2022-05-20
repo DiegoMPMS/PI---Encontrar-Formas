@@ -35,11 +35,31 @@ unsigned int formas_count = 0;
 unsigned int buracos_count = 0;
 // start e end são para as operações trabalharem apenas sobre a Imagem e não terem que percorrer a borda
 // ------------------- FUNÇÔES -------------------------------------------------
+unsigned int menor (unsigned int a, unsigned int b){
+  if (a <= b){
+    return a;
+  } else {
+    return b;
+  }
+}
+unsigned int maior (unsigned int a, unsigned int b){
+  if (a >= b){
+    return a;
+  } else {
+    return b;
+  }
+}
+int cmpfunc (const void * a, const void * b) {
+  //para uso na função qsort.
+  return ( *(int*)a - *(int*)b );
+}
+
 // ABRIR ARQUIVO E PASSAR PARA VETOR DE INT()
 int open_img (char *file_name){
   FILE *fp;
   int c;
   char formato[4];
+  printf("LOAD\n");
   // PASSOS 1-abrir arquivo, 2-verificar formato, 3-verificar se é BW (P1), 4-descobrir tamanho, 5-passar para matriz
 
   // PASSO 1
@@ -160,6 +180,7 @@ int open_img (char *file_name){
 
 int save_img (char *file_name, Imagem *img, char *c1, char *c2){
   // "wb" tenta abrir/criar o arquivo e sobrescreve o conteudo.
+  printf("SAVE\n");
   FILE *fp;
   fp = fopen(file_name, "wb");
   if (!fp){
@@ -225,6 +246,67 @@ Tupla pop(stackPtr *top){
   return tp;
 }
 
+int graymap (unsigned int *map, unsigned int *g_valido, int tons, unsigned int colunas){
+
+  if (tons > 255){
+    printf("Mais de 255 formas encontradas, não foi possivel gerar graymap\n");
+    return 1;
+  }
+
+  int intervalo = (254/tons);
+  unsigned int *tone_map;
+  tone_map = (unsigned int*)malloc(tons*2*sizeof(unsigned int));
+
+  for (int i = 0; i < tons; i++){
+    tone_map[2*i] = g_valido[i];
+    tone_map[(2*i)+1] = 1+(i*intervalo);
+    printf("(%d->%d)\n",tone_map[2*i], tone_map[(2*i)+1] );
+  }
+
+  //basicamente save_img
+  FILE *fp;
+  char file_name[50] = "shape_graymap.pgm";
+  fp = fopen(file_name, "wb");
+  if (!fp){
+    fprintf(stderr, "Erro ao salvar arquivo: %s\n", file_name);
+    exit(1);
+  }
+  //Formato
+  fprintf(fp, "P2\n");
+  //Comentário
+  fprintf(fp, "# Projeto PI 2021.2 - Grupo: Diego, Felipe, Luan.\n");
+  fprintf(fp, "# Número de formas: %d.\n", tons); //c1 = X Formas Encontradas.
+  fprintf(fp, "# Intervalo entre os tons: %d\n",intervalo); //c2 = X Buracos Encontrados.
+  //tamanho
+  unsigned int t_x = img0->size_x;
+  unsigned int t_y = img0->size_y;
+  fprintf(fp, "%d %d\n",t_x, t_y); //
+  fprintf(fp, "%d\n", 255); //
+
+  //LoooooooooooooooooooooP
+  unsigned int y_pos;
+  unsigned int x_pos;
+  for (y_pos = img0->start_y; y_pos < img0->end_y; y_pos++){
+    for (x_pos = img0->start_x; x_pos < img0->end_x; x_pos++){
+      unsigned int g = map[(y_pos*colunas)+x_pos];
+      if (g){
+        int cinza = 0;
+        for (int i = 0; i < tons; i++){
+          if (g == tone_map[2*i]){
+            cinza = tone_map[(2*i)+1];
+          }
+        }
+        fprintf(fp, "%d ", cinza);
+      }else {
+        fprintf(fp, "%d ", 255);
+      }
+    }
+    fprintf(fp, "\n");
+  }
+  fclose(fp);
+  return 0;
+}
+
 int find_shape (Imagem *img) {
   unsigned int x_pos;
   unsigned int y_pos;
@@ -234,7 +316,7 @@ int find_shape (Imagem *img) {
   unsigned int *shape_map;
   stackPtr links = NULL;
   unsigned int *grupos;
-
+  printf("Formas\n");
 
   shape_map = (unsigned int*)malloc(linhas * colunas * sizeof(unsigned int));
   if (!shape_map) {
@@ -247,25 +329,163 @@ int find_shape (Imagem *img) {
   for (y_pos = img->start_y; y_pos < img->end_y; y_pos++){
     for (x_pos = img->start_x; x_pos < img->end_x; x_pos++){
       unsigned int i = TestBit(img->data, ((y_pos*img->line_size*32) + x_pos));
-      unsigned int r = TestBit(img->data, (((y_pos-1)*img->line_size*32) + x_pos));
-      unsigned int t = TestBit(img->data, ((y_pos*img->line_size*32) + (x_pos-1)));
+      /* g_ é o valor do grupo ao qual o ponto pertence:
+      i é o pixel alvo (x, y),
+      r está acima de i (x, y-1),
+      t está a esqueda de i (x-1, y)
+      devido ao possivel caso do pixel estar e contato apenas pela diagonal,
+      temos que chacar s que é (x-1, y-1)
+      */
       unsigned int g_r = shape_map[((y_pos-1)*colunas)+x_pos];
       unsigned int g_t = shape_map[((y_pos)*colunas)+(x_pos-1)];
-
       if (i){
-        if (r && t){
-          if (g_r == g_t){
-            shape_map[(y_pos*colunas)+x_pos] = g_r;
-          } else {
-              shape_map[(y_pos*colunas)+x_pos] = g_r;
-              push(&links, g_r, g_t);
+        if((g_r == g_t) && (g_r != 0)){
+          shape_map[((y_pos)*colunas)+x_pos] = g_r;
+        }else if (g_r != g_t){
+          if ((g_r != 0) && (g_t != 0)){
+            shape_map[((y_pos)*colunas)+x_pos] = g_r;
+            push(&links, g_r, g_t);
+          }else if(g_r != 0){
+            shape_map[((y_pos)*colunas)+x_pos] = g_r;
+          }else if (g_t != 0){
+            shape_map[((y_pos)*colunas)+x_pos] = g_t;
           }
-        }else if (r){
-          shape_map[(y_pos*colunas)+x_pos] = g_r;
-        }else if (t){
-          shape_map[(y_pos*colunas)+x_pos] = g_t;
         }else {
-          shape_map[(y_pos*colunas)+x_pos] = index_count;
+          shape_map[((y_pos)*colunas)+x_pos] = index_count;
+          index_count++;
+        }
+      }
+    }
+  }
+
+  //Check se existem formas
+  if (index_count == 1){
+    return 1;
+  }
+
+  //agrupar os grupos;
+  grupos = (unsigned int*)malloc(index_count*sizeof(unsigned int));
+  memset(grupos, 0, (index_count*sizeof(unsigned int)));
+  while(links != NULL){
+    Tupla temp = pop(&links);
+    unsigned int a = temp.a;
+    unsigned int b = temp.b;
+    if ((grupos[a]==0) && (grupos[b]==0)){
+      formas_count++;
+      grupos[a] = formas_count;
+      grupos[b] = formas_count;
+    } else if((grupos[a]==0) && (grupos[b]!=0)) {
+      grupos[a] = grupos[b];
+    }else if ((grupos[b]==0) && (grupos[a]!=0)){
+      grupos[b] = grupos[a];
+    }else if (grupos[a] != grupos[b]){
+      unsigned int holder = menor(grupos[a], grupos[b]);
+      unsigned int to_change = maior(grupos[a], grupos[b]);
+      for (int i = index_count-1; i > 0; i--){
+        if (grupos[i] == to_change){
+          grupos[i] = holder;
+        }
+      }
+    }
+  }
+
+  //agrupar formas simples
+  for (int i = index_count-1; i > 0; i--){
+    if (grupos[i] == 0){
+      formas_count++;
+      grupos[i] = formas_count;
+    }
+  }
+
+  //PERCORRER imagem e separar as formas
+  for (y_pos = img->start_y; y_pos < img->end_y; y_pos++){
+    for (x_pos = img->start_x; x_pos < img->end_x; x_pos++){
+      unsigned int g_value = shape_map[((y_pos)*colunas)+x_pos];
+      if(g_value){
+        shape_map[((y_pos)*colunas)+x_pos]=grupos[g_value];
+      }
+    }
+  }
+
+
+
+  //garantia que existe pelo menos uma forma devido ao check no começo da função
+  formas_count = 1;
+
+  //--contar o total de formas
+  unsigned int *grupos_cpy = (unsigned int*)malloc(index_count*sizeof(unsigned int));
+  memset(grupos_cpy, 0, (index_count*sizeof(unsigned int)));
+  //copiar array de formas.
+  for (int i = index_count-1; i > 0; i--){
+    grupos_cpy[i] = grupos[i];
+  }
+
+  //qsort() na cópia do array de grupos nos permite contar com facilidade a quantidade
+  //de elementos unicos no array o que equivale a real quantidade de formas.
+  qsort(grupos_cpy, index_count, sizeof(unsigned int), cmpfunc);
+  for (int i = 2; i < index_count; i++){
+    if (grupos_cpy[i]>grupos_cpy[i-1]){
+      formas_count++;
+    }
+  }
+
+  //eu poderia juntar esses dois for loops em um só? sim poderia, mas não estou
+  //com um pingo de vontade usar um array que cresce durante a execução.
+  unsigned int *grupos_validos = (unsigned int*)malloc(formas_count*sizeof(unsigned int));
+  int k = 0;
+  grupos_validos[k] = grupos_cpy[1];
+  for (int i = 2; i < index_count; i++){
+    if (grupos_cpy[i]>grupos_cpy[i-1]){
+      k++;
+      grupos_validos[k] = grupos_cpy[i];
+    }
+  }
+  graymap(shape_map, grupos_validos, formas_count, colunas);
+  free(grupos);
+  free(grupos_cpy);
+  free(shape_map);
+  free(links);
+  return 0;
+}
+
+int find_hole (Imagem *img) {
+  unsigned int x_pos;
+  unsigned int y_pos;
+  unsigned int index_count = 1;
+  unsigned int colunas = img->size_x + 2;
+  unsigned int linhas = img->size_y + 2;
+  unsigned int *hole_map;
+  stackPtr links = NULL;
+  unsigned int *grupos;
+  printf("Buracos: \n");
+
+  hole_map = (unsigned int*)malloc(linhas * colunas * sizeof(unsigned int));
+  memset(hole_map, 0, (linhas*colunas*sizeof(unsigned int)));
+
+  //varrendo a imagem e agrupando os espaços vazios
+  for (y_pos = img->start_y; y_pos < img->end_y; y_pos++){
+    for (x_pos = img->start_x; x_pos < img->end_x; x_pos++){
+      unsigned int i = TestBit(img->data, ((y_pos*img->line_size*32) + x_pos));
+      //unsigned int r = TestBit(img->data, (((y_pos-1)*img->line_size*32) + x_pos));
+      //unsigned int t = TestBit(img->data, ((y_pos*img->line_size*32) + (x_pos-1)));
+      unsigned int g_r = hole_map[((y_pos-1)*colunas)+x_pos];
+      unsigned int g_t = hole_map[((y_pos)*colunas)+(x_pos-1)];
+
+      //Novo loop para a busca de 0s.
+      if (i == 0){
+        if((g_r == g_t) && (g_r != 0)){
+          hole_map[((y_pos)*colunas)+x_pos] = g_r;
+        }else if (g_r != g_t){
+          if ((g_r != 0) && (g_t != 0)){
+            hole_map[((y_pos)*colunas)+x_pos] = menor(g_r, g_t);
+            push(&links, menor(g_r, g_t), maior(g_r, g_t));
+          }else if(g_r != 0){
+            hole_map[((y_pos)*colunas)+x_pos] = g_r;
+          }else if (g_t != 0){
+            hole_map[((y_pos)*colunas)+x_pos] = g_t;
+          }
+        }else {
+          hole_map[((y_pos)*colunas)+x_pos] = index_count;
           index_count++;
         }
       }
@@ -281,102 +501,15 @@ int find_shape (Imagem *img) {
     grupos [t_temp.b] = t_temp.a;
   }
 
-  //reorganizar grupos
-  printf("Grupos Finais: \n");
-  for (int i = index_count-1; i > 0; i--){
-    unsigned int associado = grupos[i];
-    unsigned int last_associado = grupos[i];
-    while (associado){
-      last_associado = associado;
-      associado = grupos[associado];
-    }
-    grupos[i]=last_associado;
-    if (!grupos[i]){
-      formas_count++;
-      printf("%d - ", i);
-    }
-  }
-  printf("\n");
-
-  //ler o vetor de associados e alterar os valores em shape_map
-  for (y_pos = img->start_y; y_pos < img->end_y; y_pos++){
-    for (x_pos = img->start_x; x_pos < img->end_x; x_pos++){
-      unsigned int g_value = shape_map[(y_pos*colunas)+x_pos];
-        if (grupos[g_value]){
-          shape_map[(y_pos*colunas)+x_pos] = grupos[g_value];
-        }
-      //printf("%d ",shape_map[(y_pos*colunas)+x_pos]);
-    }
-    //printf("\n");
-  }
-
-  free(shape_map);
-  free(grupos);
-  free(links);
-  return 0;
-}
-
-int find_hole (Imagem *img) {
-  unsigned int x_pos;
-  unsigned int y_pos;
-  unsigned int index_count = 1;
-  unsigned int colunas = img->size_x + 2;
-  unsigned int linhas = img->size_y + 2;
-  unsigned int *hole_map;
-  stackPtr links = NULL;
-  unsigned int *grupos;
-
-  hole_map = (unsigned int*)malloc(linhas * colunas * sizeof(unsigned int));
-  memset(hole_map, 0, (linhas*colunas*sizeof(unsigned int)));
-
-  //varrendo a imagem e agrupando os pixels
-  for (y_pos = img->start_y; y_pos < img->end_y; y_pos++){
-    for (x_pos = img->start_x; x_pos < img->end_x; x_pos++){
-      unsigned int i = TestBit(img->data, ((y_pos*img->line_size*32) + x_pos));
-      unsigned int r = TestBit(img->data, (((y_pos-1)*img->line_size*32) + x_pos));
-      unsigned int t = TestBit(img->data, ((y_pos*img->line_size*32) + (x_pos-1)));
-      unsigned int g_r = hole_map[((y_pos-1)*colunas)+x_pos];
-      unsigned int g_t = hole_map[((y_pos)*colunas)+(x_pos-1)];
-      //TO-DO RE IMPLEMENTAR PARA PROCURAR POR 0
-      if (i==0){
-        if ((r==0) && (t==0)){
-          if ((g_r == g_t) && g_r != 0){
-            hole_map[(y_pos*colunas)+x_pos] = g_r;
-          } else if ((g_r != g_t) && g_r != 0){
-              hole_map[(y_pos*colunas)+x_pos] = g_r;
-              push(&links, g_r, g_t);
-          } else{
-            hole_map[(y_pos*colunas)+x_pos] = index_count;
-            index_count++;
-          }
-        }else if ((r==0) && (g_r !=0)){
-          hole_map[(y_pos*colunas)+x_pos] = g_r;
-        }else if ((t==0) && (g_t != 0)){
-          hole_map[(y_pos*colunas)+x_pos] = g_t;
-        }else {
-          hole_map[(y_pos*colunas)+x_pos] = index_count;
-          index_count++;
-        }
-      }
-    }
-  }
-
-  //converter pilha em vetor de associados
-  grupos = (unsigned int*)malloc(index_count* sizeof(unsigned int));
-  for (int i = index_count; i > 0; i--){
-    grupos[i] = 0;
-  }
-  while (links != NULL) {
-    Tupla t_temp;
-    t_temp = pop(&links);
-    grupos [t_temp.b] = t_temp.a;
-  }
+  //Print das correlações dos grupos
+  /*
   for (int i = index_count-1; i > 0; i--){
     printf("(%d->%d)", i, grupos[i]);
   }
   printf("\n");
+  */
+
   //reorganizar grupos
-  printf("Grupos Finais Buracos: \n");
   for (int i = index_count-1; i > 0; i-- ){
     unsigned int associado = grupos[i];
     unsigned int last_associado = grupos[i];
@@ -387,63 +520,65 @@ int find_hole (Imagem *img) {
     grupos[i]=last_associado;
     if (!grupos[i]){
       buracos_count++;
-      printf("%d - ", i);
+      //printf("%d - ", i);
     }
   }
-  printf("\n");
+  //printf("\n");
 
   //ler o vetor de associados e alterar os valores em shape_map
   for (y_pos = img->start_y; y_pos < img->end_y; y_pos++){
     for (x_pos = img->start_x; x_pos < img->end_x; x_pos++){
       unsigned int g_value = hole_map[(y_pos*colunas)+x_pos];
-      //printf("%d ", g_value);
         if (grupos[g_value]){
           hole_map[(y_pos*colunas)+x_pos] = grupos[g_value];
         }
-      printf("%d ",hole_map[(y_pos*colunas)+x_pos]);
+      //printf("%d ",hole_map[(y_pos*colunas)+x_pos]);
     }
-    printf("\n");
+    //printf("\n");
   }
 
-  for (int i = index_count-1; i > 0; i--){
+  //Print da tabela de associação final
+  /*for (int i = index_count-1; i > 0; i--){
     printf("(%d->%d)", i, grupos[i]);
   }
-  printf("\n");
+  printf("\n");*/
+
   free(hole_map);
   free(grupos);
   free(links);
   return 0;
 }
+
 // ------------------- MAIN ----------------------------------------------------
 int main(int argc, char const *argv[]) {
   clock_t t ;
   double elapsed_clocks;
 
   t = clock(); //"Start clock"
-  printf("Img Open result: %d\n", open_img(argv[1]) );//Load
+  open_img(argv[1]);//Load
   t = clock() - t;//"Stop Clock"
   elapsed_clocks = ((double)t)/CLOCKS_PER_SEC; //"Math"
   printf("Load demorou: %f segundos\n", elapsed_clocks);
   printf("-------------------------------------------\n");
 
   t = clock(); //"Start clock"
-  printf("Img find_shape result: %d\n", find_shape(img0));//Load
+  find_shape(img0);
   t = clock() - t;//"Stop Clock"
   elapsed_clocks = ((double)t)/CLOCKS_PER_SEC; //"Math"
-  printf("Busca por formas demorou: %f segundos\n", elapsed_clocks);
   printf("Total de formas Encontradas: %d\n", formas_count);
+  printf("Busca por formas/gerar graymap demorou: %f segundos\n", elapsed_clocks);
   printf("-------------------------------------------\n");
 
   t = clock(); //"Start clock"
-  printf("Img find_hole result: %d\n", find_hole(img0));//Load
+  find_hole(img0);
   t = clock() - t;//"Stop Clock"
   elapsed_clocks = ((double)t)/CLOCKS_PER_SEC; //"Math"
+  printf("Total de buracos Encontrados: %d\n", buracos_count-1);
   printf("Busca por buracos demorou: %f segundos\n", elapsed_clocks);
-  printf("Total de buracos Encontrados: %d\n", buracos_count);
   printf("-------------------------------------------\n");
 
   t = clock(); //"Start clock"
-  printf("Img Save result: %d\n", save_img("copia.pbm", img0, "nada", "algo"));
+  save_img("copia.pbm", img0, "nada", "algo");//Save
   t = clock() - t;//"Stop Clock"
   elapsed_clocks = ((double)t)/CLOCKS_PER_SEC; //"Math"
   printf("Save demorou: %f segundos\n", elapsed_clocks);
