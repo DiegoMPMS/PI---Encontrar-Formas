@@ -1,101 +1,57 @@
-// ------------------- INCLUDE / MACROS ----------------------------------------
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
-#define SetBit(A,k) ( A[(k/32)] |= (1 << (k%32)) ) // lembrete k = ((y_pos*line_size*32) + x_pos)
-#define ClearBit(A,k) ( A[(k/32)] &= ~(1 << (k%32)) ) // lembrete k = ((y_pos*line_size*32) + x_pos)
-#define TestBit(A,k) ( A[(k/32)] & (1 << (k%32)) ) // lembrete k = ((y_pos*line_size*32) + x_pos)
-// ------------------- VARIAVEIS / CONSTANTES ----------------------------------
-int img_x = 0;
-int img_y = 0;
-int line_size = 0; //número de inteiros que compoem a linha de array de bits
-unsigned int* original_img;
-unsigned int* filtered_img;
-// origin e end são para as operações trabalharem apenas sobre a imagem e não terem que percorrer a borda
-int img_start_x = 1;
-int img_start_y = 1;
-int img_end_x = 0; // img_x + 1
-int img_end_y = 0; //img_y + 1
-/*
-  Essa mascara de detecção de bordas simples funciona apenas para imagens preto e branco,
-  seu funcionamento é bem simples:
-  se "você(pixel)" é 1 e pelo menos um de seus vizinhos é 0 = você é uma borda;
-    se todos seus vizinhos são 1 = você não é bordas;
-  e por fim se você é 1 = você não é borda;
-  esse processo permite converter as formas em bordas continuas de um pixel.
+#define SetBit(A,k) ( A[(k/32)] |= (1 << (k%32)) ) // lembrete k = ((y_pos*img0->line_size*32) + x_pos)
+#define ClearBit(A,k) ( A[(k/32)] &= ~(1 << (k%32)) ) // lembrete k = ((y_pos*img0->line_size*32) + x_pos)
+#define TestBit(A,k) ( A[(k/32)] & (1 << (k%32)) ) // lembrete k = ((y_pos*img0->line_size*32) + x_pos)
+// ------------------- VARIAVEIS / CONSTANTES / STRUCTS ------------------------
+typedef struct{
+  unsigned int start_x;
+  unsigned int start_y;
+  unsigned int end_x;
+  unsigned int end_y;
+  unsigned int size_x;
+  unsigned int size_y;
+  unsigned int line_size;
+  unsigned int* data;
+} Imagem;
 
-  obs.: talvez seja possivel reduzir o número de movimentações na matriz usando
-  apenas uma linha e multiplicações de boleanos (devido a imagem preto e branco).
+struct stack{
+   unsigned int index_a;
+   unsigned int index_b;
+   struct stack *ptr; //pointer type of stack
+};
+typedef struct{
+  unsigned int a;
+  unsigned int b;
+}Tupla;
 
-  pix(x,y) = pix(x,y) - [pix(x-1,y-1)*pix(x-1,y)*pix(x-1,y+1)*...*pix(x+1,y+1)]
-
-  o termo entre cheves permite facilmente detectar se algum dos pixels vizinhos é 0 (short-circuit)
-  se o ponto central for 0 e todos vizinhos 1 o resultado é -1 ou seja => 0;
-  se o ponto central for 0 e todos vizinhos 0 o resultado é 0 ou seja => 0;
-  se o ponto central for 0 e e pelo menos um vizinho é != 1 o resultado é 0 ou seja => 0;
-  se o ponto central for 1 e todos vizinhos 1 o resultado é 0 ou seja => 0;
-  se o ponto central for 1 e todos vizinhos 0 o resultado é 1 ou seja => 1; (caso especial de forma com tamanho de 1 pixel)
-  se o ponto central for 1 e e pelo menos um vizinho é 0 o resultado é 1 ou seja => 1;
-
-  18/04/22
-  Obs.: a mascara pode ser simplificada e desconsiderar as diagonais, o que nos ajuda na hora de detectar e seguir a borda
-  ignorando os cantos na aplicação da mascara será impossivel a formação de "L" isso quer dizer que após aplicação do filtro
-  em um espaço 3x3 poderão existir apenas 3 pixeis pretos, e eles deverão tocar pelo menos dois lados opostos dese quadrado
-  dessa forma basta saber sua posição atual, sua ultiama posição e a partir dai procurar a ultima posição.
-
-  int edge_mask [3][3] = {{0 , -1 , 0}, {-1 , 4 , -1}, {0 , -1 , 0}};
-
-*/
+typedef struct stack Stack;
+typedef Stack *stackPtr;
+// start e end são para as operações trabalharem apenas sobre a Imagem e não terem que percorrer a borda
+Imagem *img0;
+unsigned int formas_count = 0;
+unsigned int buracos_count = 0;
+// start e end são para as operações trabalharem apenas sobre a Imagem e não terem que percorrer a borda
 // ------------------- FUNÇÔES -------------------------------------------------
-// TO-DO escolher entre one-liner e matriz para o filtro. 18/04/22 => ONE-LINER
-void apply_mask (unsigned int *o_img){
-  int i;
-  int j;
-  for (j = img_start_y; j <= img_end_y; j++){
-    for (i = img_start_x; i <= img_end_x; j++){
-      /*
-       a função abaixo tem que ser modificada para se adequar a matriz de bits
-       implementada dentro de um array de int, 3 macros de manipulações serão criadas para tratar
-       disso, 1 SET, 2 CLEAR, 3 TEST.
-       Para mais informações:
-       http://www.mathcs.emory.edu/~cheung/Courses/255/Syllabus/1-C-intro/bit-array.html
-       mascara:
-       (original_img[cord_x][cord_y] - (original_img[cord_x -1][cord_y] * original_img[cord_x+1][cord_y] * original_img[cord_x][cord_y-1] * original_img[cord_x][cord_y+1]));
-      */
-      int check = TestBit(original_img, (j*line_size*32)+i) & ~(TestBit(original_img, ((j-1)*line_size*32)+i)
-          & TestBit(original_img, (j*line_size*32)+(i-1)) & TestBit(original_img, (j*line_size*32)+(i+1))
-          & TestBit(original_img, ((j+1)*line_size*32)+i));
-      if (check){
-        SetBit(filtered_img, (j*line_size*32)+i);
-      }
-
-    }
+unsigned int menor (unsigned int a, unsigned int b){
+  if (a <= b){
+    return a;
+  } else {
+    return b;
   }
-  return
 }
-
-// função que percorre a imagem e encontra as "sementes" das formas
-void find_seed () {
-  /*
-  função apenas para lustração, pois ela percorre a imagem que ela não recebe como parametro.
-  essa função aparecerá dentro do main, ela percorre a matrix e encontra o priemrio ponto
-  preto da imagem "semente", e passa a cordenada dessa semente para a função "get_shape"
-  que por sua vez percorre a forma, procurando por pixeis conectados e os remove da imagem.
-  a procura por buracos é feita posterirormente.
-  */
-  // i Linhas  | j Colunas
-  int i;
-  int j;
-  //busca começa (1,1) e termina em (x+1, y+1) por causa do padding adicionado no inicio do código
-  for (j = img_start_y ; j <= img_end_y ; j++ ){
-    for (i = img_start_x ; i <= img_end_x ; i++){
-      //preto = 1 = TRUE
-      if (filtered_img[i][j]){
-        get_shape(i,j);
-      }
-    }
+unsigned int maior (unsigned int a, unsigned int b){
+  if (a >= b){
+    return a;
+  } else {
+    return b;
   }
+}
+int cmpfunc (const void * a, const void * b) {
+  //para uso na função qsort.
+  return ( *(int*)a - *(int*)b );
 }
 
 // ABRIR ARQUIVO E PASSAR PARA VETOR DE INT()
@@ -103,23 +59,28 @@ int open_img (char *file_name){
   FILE *fp;
   int c;
   char formato[4];
+  printf("LOAD\n");
   // PASSOS 1-abrir arquivo, 2-verificar formato, 3-verificar se é BW (P1), 4-descobrir tamanho, 5-passar para matriz
+
   // PASSO 1
   fp = fopen(file_name, "rb");
   if (fp == NULL){
     perror("Erro ao abrir arquivo, certifique-se de que o nome do arquivo foi inserido corretamente.\n");
     exit(1);
   }
+
   //PASSO 2
   if (!fgets(formato, sizeof(formato), fp)){
     perror("ERROR: Arquivo %s formatado incorretamente, por favor fornecer um arquivo PBM.\n");
     exit(1);
   }
+
   //PASSO 3
   if (formato[0] != 'P' || formato[1] != '1'){
-    fprintf(stderr, "ERRO: imagem não se encontra no formato P1 (Preto e Branco).\n");
+    fprintf(stderr, "ERRO: Imagem não se encontra no formato P1 (Preto e Branco).\n");
     exit(1);
   }
+
   //PASSO 3.1 - ignorar comentários
   c = getc(fp);
   /*
@@ -136,66 +97,77 @@ int open_img (char *file_name){
   }
   ungetc (c, fp);
 
+  //PASSO 3.2 Pre alocar struct.
+  img0 = (Imagem *)malloc(sizeof(Imagem));
+    if (!img0) {
+         fprintf(stderr, "Erro ao alocar Memória para a estrutura da Imagem.\n");
+         exit(1);
+  }
+  //definir que a Imagem começa em (1,1), garante que existe padding em volta da Imagem.
+  img0->start_x = 1;
+  img0->start_y = 1;
+
   //PASSO 4
-  if(fscanf(fp, "%d %d", &img_x, &img_y) != 2){
-    fprintf(stderr, "ERRO: problema ao ler tamanho da imagem\n");
+  if(fscanf(fp, "%d %d", &img0->size_x, &img0->size_y) != 2){
+    fprintf(stderr, "ERRO: problema ao ler tamanho da Imagem\n");
     exit(1);
   }
-  printf("X: %d -- Y: %d\n",img_x, img_y);
+  printf("X: %d -- Y: %d\n",img0->size_x, img0->size_y);
 
   //PASSO 5
-  img_end_x = img_x + 1;
-  img_end_y = img_y + 1;
+  img0->end_x = img0->size_x + 1;
+  img0->end_y = img0->size_y + 1;
   /*
   C não suporta um array de bits, podemos desperdiçar 31bits de espaço e armazenar cada pixel como uma int.
   ou podemos agrupar 32 pixels em um int, o que reduz MUITO o espaço necessário,
   mas consume muito mais da minha paciencia.
   desperdiçãndo espaço uma img de 10.000x10.000 pixels ocuparia aprox 381 megabytes,
   agrupando 32 bits em um int ela ocuparia apenas 11.9 megabytes ("pequena diferença")
-  a imagem maxima suportada nesse código tem n pixels onde n é o maior tamanho possivel de um int,
-  tal imagem ocuparia 8gigas de ram (desperdico) ou 255megas (agrupado).
+  a Imagem maxima suportada nesse código tem n pixels onde n é o maior tamanho possivel de um int,
+  tal Imagem ocuparia 8gigas de ram (desperdico) ou 255megas (agrupado).
 
   utilizando o agrupamento de bits em inteiros, nós teremeos o vetor:
-    original_img[(img_x/32)+(1*(img_x%32 != 0))][img_y]
+    img0[(img_x/32)+(1*(img_x%32 != 0))][img_y]
     ou seja o número de colunas da imgagem n inteiros onde n = res_x/32 e caso a divisão não seja exata
     ele irá adicionar mais um inteiro que será parcialmente preenchido.
-    sendo assim é de vital importancia guardar o tamanho da imagem original.
+    sendo assim é de vital importancia guardar o tamanho da Imagem original.
   */
-  //+2 é o padding de pixels brancos em volta da imagem para facilitar aplicação do filtro
-  line_size = (((img_x+2)/32)+(1*(((img_x+2)%32) != 0)));
-  printf("line size = %d\n", line_size );
-  int size = ( line_size * (img_y+2));
-  printf("total size = %d integers\n", size);
-  original_img = (unsigned int*)malloc(sizeof(unsigned int)*size);
+  //+2 é o padding de pixels brancos em volta da Imagem para facilitar aplicação do filtro
+  img0->line_size = (((img0->size_x+2)/32)+(1*(((img0->size_x+2)%32) != 0)));
+  printf("line size = %d\n", img0->line_size );
+  int size = ( img0->line_size * (img0->size_y+2));
+  printf("total img size = %d integers\n", size);
+  img0->data = (unsigned int*)malloc(sizeof(unsigned int)*size);
   /*
    C é sofrimento, como a matriz que descreve a imgem tem seu tamanho declarado durante execução
    ela é na verdade um array 1D, ou seja devemos prestar atenção na gora de acessar.
    e não podemos acessar como img[x][y] temos que acessar img[y*line_size + x]
-   !!!! IMPORTENTE COMO PADRÃO PARA ESSE PROJETO O VETOR 1D QUE ARMAZENA A IMAGEM
+   !!!! IMPORTENTE COMO PADRÃO PARA ESSE PROJETO O VETOR 1D QUE ARMAZENA A Imagem
    É DO TIPO [Y][X], ONDE Y É A LINHA E X A COLUNA, DESSA FORMA AO ACESSAR O VETOR 1D
    TEMOS QUE MULTIPLICAR A POSIÇÃO DA LINHA PELO NÚMERO DE INTEIROS POR LINHA, PARA FACILIAR ESSE
    VALOR SERÁ UMA VÁRIAVEL DECLARADA NO COMEÇO DO CÓDIO.
    img[y*line_size + x] = img[y][x]
    onde y é o número de linhas e x é o número de colunas
   */
-  if (!original_img){
-    fprintf(stderr, "ERROR: incapaz de alocar memória\n");
+  if (!img0){
+    fprintf(stderr, "ERROR: incapaz de alocar memória para os dados da Imagem\n");
     exit(1);
   }
   //após alocação toda a matriz é preenchida com 0.
-  memset(original_img, 0, size);
+  memset(img0->data, 0, size*sizeof(unsigned int));
 
   int y_pos;
   int x_pos;
-  for (y_pos = 1; y_pos <= img_y; y_pos++){
+  for (y_pos = 1; y_pos < img0->end_y; y_pos++){
     x_pos = 1; // reset da variavel.
-    while (x_pos <= img_end_x) {
+    while (x_pos < img0->end_x) {
       c = getc(fp);
       if (c == 10 || c == 20){
-
+        //nada acontece feijoada.
+        //10 = line break, 20 = espaço, 48 = 0, 49 = 1.
       }else{
         if (c == 49){
-          SetBit(original_img, ((y_pos*line_size*32) + x_pos));
+          SetBit(img0->data, ((y_pos*img0->line_size*32) + x_pos));
         }
       x_pos++;
       }
@@ -206,8 +178,9 @@ int open_img (char *file_name){
   return 0;
 }
 
-int save_img (char *file_name, unsigned int *img, char *c1, char *c2){
+int save_img (char *file_name, Imagem *img, unsigned int f_c, unsigned int h_c){
   // "wb" tenta abrir/criar o arquivo e sobrescreve o conteudo.
+  printf("SAVE\n");
   FILE *fp;
   fp = fopen(file_name, "wb");
   if (!fp){
@@ -217,20 +190,21 @@ int save_img (char *file_name, unsigned int *img, char *c1, char *c2){
   //Formato
   fprintf(fp, "P1\n");
   //Comentário
-  fprintf(fp, "# Projeto PI 2021.2 - Grupo: Diego, Feliep, Luan.\n");
-  fprintf(fp, "# %s\n",c1 ); //c1 = X Formas Encontradas.
-  fprintf(fp, "# %s\n",c2 ); //c2 = X Buracos Encontrados.
+  fprintf(fp, "# Projeto PI 2021.2 - Grupo: Diego, Felipe, Luan.\n");
+  fprintf(fp, "# Total de Formas Encontradas: %d.\n",f_c ); //c1 = X Formas Encontradas.
+  fprintf(fp, "# Total de Buracos Encontrados: %d.\n",h_c ); //c2 = X Buracos Encontrados.
+  fprintf(fp, "# Para mais informações sobre as formas favor observar o arquivo: 'FormasGraymap.pgm'.\n");
   //tamanho
-  int t_x = img_end_x-img_start_x;
-  int t_y = img_end_y-img_start_y;
+  unsigned int t_x = img->size_x;
+  unsigned int t_y = img->size_y;
   fprintf(fp, "%d %d\n",t_x, t_y); //
 
   //LoooooooooooooooooooooP
-  int y_pos;
-  int x_pos;
-  for (y_pos = 1; y_pos <= img_end_y; y_pos++){
-    for (x_pos = 1; x_pos <= img_end_x; x_pos++){
-      if (TestBit(original_img, ((y_pos*line_size*32) + x_pos))){
+  unsigned int y_pos;
+  unsigned int x_pos;
+  for (y_pos = 1; y_pos < img->end_y; y_pos++){
+    for (x_pos = 1; x_pos < img->end_x; x_pos++){
+      if (TestBit(img->data, ((y_pos*img->line_size*32) + x_pos))){
         putc(49, fp);
       }else {
         putc(48, fp);
@@ -243,4 +217,510 @@ int save_img (char *file_name, unsigned int *img, char *c1, char *c2){
   return 0;
 }
 
+void push (stackPtr *top, int x , int y){
+    stackPtr nodePtr;
+
+    nodePtr = malloc(sizeof(Stack));
+
+    if(nodePtr != NULL)
+    {
+       nodePtr->index_a = x;
+       nodePtr->index_b = y;
+       nodePtr->ptr = *top;
+       *top = nodePtr;
+    }
+
+    else
+       printf("Erro ao alocar espaço para ponteiros/n");
+   }
+
+Tupla pop(stackPtr *top){
+  Tupla tp;
+  stackPtr tempPtr; //temporary pointer
+
+  tempPtr = *top;
+  tp.a = (*top)-> index_a;
+  tp.b = (*top)-> index_b;
+  *top = (*top) -> ptr;
+  free(tempPtr); //free temporary pointer value
+
+  return tp;
+}
+
+int graymap (unsigned int *map, unsigned int *g_valido, int tons, unsigned int colunas, char *file_name){
+
+  if (tons > 255){
+    printf("Mais de 255 formas encontradas, não foi possivel gerar graymap\n");
+    return 1;
+  }
+
+  int intervalo = (254/tons);
+  unsigned int *tone_map;
+  tone_map = (unsigned int*)malloc(tons*2*sizeof(unsigned int));
+
+  for (int i = 0; i < tons; i++){
+    tone_map[2*i] = g_valido[i];
+    tone_map[(2*i)+1] = 1+(i*intervalo);
+    //printf("(%d->%d)\n",tone_map[2*i], tone_map[(2*i)+1] );
+  }
+
+  //basicamente save_img
+  FILE *fp;
+  fp = fopen(file_name, "wb");
+  if (!fp){
+    fprintf(stderr, "Erro ao salvar arquivo: %s\n", file_name);
+    exit(1);
+  }
+  //Formato
+  fprintf(fp, "P2\n");
+  //Comentário
+  fprintf(fp, "# Projeto PI 2021.2 - Grupo: Diego, Felipe, Luan.\n");
+  fprintf(fp, "# Número de formas: %d.\n", tons); //c1 = X Formas Encontradas.
+  fprintf(fp, "# Intervalo entre os tons: %d.\n",intervalo); //c2 = X Buracos Encontrados.
+  //tamanho
+  unsigned int t_x = img0->size_x;
+  unsigned int t_y = img0->size_y;
+  fprintf(fp, "%d %d\n",t_x, t_y); //
+  fprintf(fp, "%d\n", 255); //
+
+  //LoooooooooooooooooooooP
+  unsigned int y_pos;
+  unsigned int x_pos;
+  for (y_pos = img0->start_y; y_pos < img0->end_y; y_pos++){
+    for (x_pos = img0->start_x; x_pos < img0->end_x; x_pos++){
+      unsigned int g = map[(y_pos*colunas)+x_pos];
+      if (g){
+        int cinza = 0;
+        for (int i = 0; i < tons; i++){
+          if (g == tone_map[2*i]){
+            cinza = tone_map[(2*i)+1];
+          }
+        }
+        fprintf(fp, "%d ", cinza);
+      }else {
+        fprintf(fp, "%d ", 255);
+      }
+    }
+    fprintf(fp, "\n");
+  }
+  fclose(fp);
+  return 0;
+}
+
+int find_shape (Imagem *img) {
+  unsigned int x_pos;
+  unsigned int y_pos;
+  unsigned int index_count = 1;
+  unsigned int colunas = img->size_x + 2;
+  unsigned int linhas = img->size_y + 2;
+  unsigned int *shape_map;
+  stackPtr links = NULL;
+  unsigned int *grupos;
+  printf("Formas\n");
+
+  shape_map = (unsigned int*)malloc(linhas * colunas * sizeof(unsigned int));
+  if (!shape_map) {
+       fprintf(stderr, "Erro ao alocar Memória para busca de formas.\n");
+       exit(1);
+}
+  memset(shape_map, 0, (linhas*colunas*sizeof(unsigned int)));
+
+  //varrendo a imagem e agrupando os pixels
+  for (y_pos = img->start_y; y_pos < img->end_y; y_pos++){
+    for (x_pos = img->start_x; x_pos < img->end_x; x_pos++){
+      unsigned int i = TestBit(img->data, ((y_pos*img->line_size*32) + x_pos));
+      /* g_ é o valor do grupo ao qual o ponto pertence:
+      i é o pixel alvo (x, y),
+      r está acima de i (x, y-1),
+      t está a esqueda de i (x-1, y)
+      devido ao possivel caso do pixel estar e contato apenas pela diagonal,
+      temos que chacar s que é (x-1, y-1)
+      */
+      unsigned int g_r = shape_map[((y_pos-1)*colunas)+x_pos];
+      unsigned int g_t = shape_map[((y_pos)*colunas)+(x_pos-1)];
+      if (i){
+        if((g_r == g_t) && (g_r != 0)){
+          shape_map[((y_pos)*colunas)+x_pos] = g_r;
+        }else if (g_r != g_t){
+          if ((g_r != 0) && (g_t != 0)){
+            shape_map[((y_pos)*colunas)+x_pos] = g_r;
+            push(&links, g_r, g_t);
+          }else if(g_r != 0){
+            shape_map[((y_pos)*colunas)+x_pos] = g_r;
+          }else if (g_t != 0){
+            shape_map[((y_pos)*colunas)+x_pos] = g_t;
+          }
+        }else {
+          shape_map[((y_pos)*colunas)+x_pos] = index_count;
+          index_count++;
+        }
+      }
+    }
+  }
+
+  //Check se existem formas
+  if (index_count == 1){
+    return 1;
+  }
+
+  //agrupar os grupos;
+  grupos = (unsigned int*)malloc(index_count*sizeof(unsigned int));
+  memset(grupos, 0, (index_count*sizeof(unsigned int)));
+  while(links != NULL){
+    Tupla temp = pop(&links);
+    unsigned int a = temp.a;
+    unsigned int b = temp.b;
+    if ((grupos[a]==0) && (grupos[b]==0)){
+      formas_count++;
+      grupos[a] = formas_count;
+      grupos[b] = formas_count;
+    } else if((grupos[a]==0) && (grupos[b]!=0)) {
+      grupos[a] = grupos[b];
+    }else if ((grupos[b]==0) && (grupos[a]!=0)){
+      grupos[b] = grupos[a];
+    }else if (grupos[a] != grupos[b]){
+      unsigned int holder = menor(grupos[a], grupos[b]);
+      unsigned int to_change = maior(grupos[a], grupos[b]);
+      for (int i = index_count-1; i > 0; i--){
+        if (grupos[i] == to_change){
+          grupos[i] = holder;
+        }
+      }
+    }
+  }
+
+  //agrupar formas simples
+  for (int i = index_count-1; i > 0; i--){
+    if (grupos[i] == 0){
+      formas_count++;
+      grupos[i] = formas_count;
+    }
+  }
+
+  //PERCORRER imagem e separar as formas
+  for (y_pos = img->start_y; y_pos < img->end_y; y_pos++){
+    for (x_pos = img->start_x; x_pos < img->end_x; x_pos++){
+      unsigned int g_value = shape_map[((y_pos)*colunas)+x_pos];
+      if(g_value){
+        shape_map[((y_pos)*colunas)+x_pos]=grupos[g_value];
+      }
+    }
+  }
+
+
+
+  //garantia que existe pelo menos uma forma devido ao check no começo da função
+  formas_count = 1;
+
+  //--contar o total de formas
+  unsigned int *grupos_cpy = (unsigned int*)malloc(index_count*sizeof(unsigned int));
+  memset(grupos_cpy, 0, (index_count*sizeof(unsigned int)));
+  //copiar array de formas.
+  for (int i = index_count-1; i > 0; i--){
+    grupos_cpy[i] = grupos[i];
+  }
+
+  //qsort() na cópia do array de grupos nos permite contar com facilidade a quantidade
+  //de elementos unicos no array o que equivale a real quantidade de formas.
+  qsort(grupos_cpy, index_count, sizeof(unsigned int), cmpfunc);
+  for (int i = 2; i < index_count; i++){
+    if (grupos_cpy[i]>grupos_cpy[i-1]){
+      formas_count++;
+    }
+  }
+
+  //eu poderia juntar esses dois for loops em um só? sim poderia, mas não estou
+  //com um pingo de vontade usar um array que cresce durante a execução.
+  unsigned int *grupos_validos = (unsigned int*)malloc(formas_count*sizeof(unsigned int));
+  int k = 0;
+  grupos_validos[k] = grupos_cpy[1];
+  for (int i = 2; i < index_count; i++){
+    if (grupos_cpy[i]>grupos_cpy[i-1]){
+      k++;
+      grupos_validos[k] = grupos_cpy[i];
+    }
+  }
+
+  graymap(shape_map, grupos_validos, formas_count, colunas, "FormasGraymap.pgm");
+
+  free(grupos);
+  free(grupos_cpy);
+  free(shape_map);
+  free(links);
+  return 0;
+}
+
+int find_hole_bkp (Imagem *img) {
+  unsigned int x_pos;
+  unsigned int y_pos;
+  unsigned int index_count = 1;
+  unsigned int colunas = img->size_x + 2;
+  unsigned int linhas = img->size_y + 2;
+  unsigned int *hole_map;
+  stackPtr links = NULL;
+  unsigned int *grupos;
+  printf("Buracos: \n");
+
+  hole_map = (unsigned int*)malloc(linhas * colunas * sizeof(unsigned int));
+  memset(hole_map, 0, (linhas*colunas*sizeof(unsigned int)));
+
+  //varrendo a imagem e agrupando os espaços vazios
+  for (y_pos = img->start_y; y_pos < img->end_y; y_pos++){
+    for (x_pos = img->start_x; x_pos < img->end_x; x_pos++){
+      unsigned int i = TestBit(img->data, ((y_pos*img->line_size*32) + x_pos));
+      unsigned int g_r = hole_map[((y_pos-1)*colunas)+x_pos];
+      unsigned int g_t = hole_map[((y_pos)*colunas)+(x_pos-1)];
+
+      //Novo loop para a busca de 0s.
+      if (i == 0){
+        if((g_r == g_t) && (g_r != 0)){
+          hole_map[((y_pos)*colunas)+x_pos] = g_r;
+        }else if (g_r != g_t){
+          if ((g_r != 0) && (g_t != 0)){
+            hole_map[((y_pos)*colunas)+x_pos] = menor(g_r, g_t);
+            push(&links, menor(g_r, g_t), maior(g_r, g_t));
+          }else if(g_r != 0){
+            hole_map[((y_pos)*colunas)+x_pos] = g_r;
+          }else if (g_t != 0){
+            hole_map[((y_pos)*colunas)+x_pos] = g_t;
+          }
+        }else {
+          hole_map[((y_pos)*colunas)+x_pos] = index_count;
+          index_count++;
+        }
+      }
+    }
+  }
+
+  //converter pilha em vetor de associados
+  grupos = (unsigned int*)malloc(index_count* sizeof(unsigned int));
+  memset(grupos, 0, (index_count*sizeof(unsigned int)));
+  while (links != NULL) {
+    Tupla t_temp;
+    t_temp = pop(&links);
+    grupos [t_temp.b] = t_temp.a;
+  }
+
+  //Print das correlações dos grupos
+  /*
+  for (int i = index_count-1; i > 0; i--){
+    printf("(%d->%d)", i, grupos[i]);
+  }
+  printf("\n");
+  */
+
+  //reorganizar grupos
+  for (int i = index_count-1; i > 0; i-- ){
+    unsigned int associado = grupos[i];
+    unsigned int last_associado = grupos[i];
+    while (associado){
+      last_associado = associado;
+      associado = grupos[associado];
+    }
+    grupos[i]=last_associado;
+    if (!grupos[i]){
+      buracos_count++;
+      //printf("%d - ", i);
+    }
+  }
+  //printf("\n");
+
+  //ler o vetor de associados e alterar os valores em hole_map
+  for (y_pos = img->start_y; y_pos < img->end_y; y_pos++){
+    for (x_pos = img->start_x; x_pos < img->end_x; x_pos++){
+      unsigned int g_value = hole_map[(y_pos*colunas)+x_pos];
+        if (grupos[g_value]){
+          hole_map[(y_pos*colunas)+x_pos] = grupos[g_value];
+        }
+      //printf("%d ",hole_map[(y_pos*colunas)+x_pos]);
+    }
+    //printf("\n");
+  }
+
+  //Print da tabela de associação final
+  /*for (int i = index_count-1; i > 0; i--){
+    printf("(%d->%d)", i, grupos[i]);
+  }
+  printf("\n");*/
+
+  free(hole_map);
+  free(grupos);
+  free(links);
+  return 0;
+}
+
+int find_hole (Imagem *img){
+  unsigned int x_pos;
+  unsigned int y_pos;
+  unsigned int index_count = 1;
+  unsigned int colunas = img->size_x + 2;
+  unsigned int linhas = img->size_y + 2;
+  unsigned int *hole_map;
+  stackPtr links = NULL;
+  unsigned int *grupos;
+  printf("Buracos\n");
+
+  hole_map = (unsigned int*)malloc(linhas * colunas * sizeof(unsigned int));
+  if (!hole_map) {
+       fprintf(stderr, "Erro ao alocar Memória para busca de buracos.\n");
+       exit(1);
+}
+  memset(hole_map, 0, (linhas*colunas*sizeof(unsigned int)));
+
+  //varrendo a imagem e agrupando os pixels
+  for (y_pos = img->start_y; y_pos < img->end_y; y_pos++){
+    for (x_pos = img->start_x; x_pos < img->end_x; x_pos++){
+      unsigned int i = TestBit(img->data, ((y_pos*img->line_size*32) + x_pos));
+      /* g_ é o valor do grupo ao qual o ponto pertence:
+      i é o pixel alvo (x, y),
+      r está acima de i (x, y-1),
+      t está a esqueda de i (x-1, y)
+      devido ao possivel caso do pixel estar e contato apenas pela diagonal,
+      temos que chacar s que é (x-1, y-1)
+      */
+      unsigned int g_r = hole_map[((y_pos-1)*colunas)+x_pos];
+      unsigned int g_t = hole_map[((y_pos)*colunas)+(x_pos-1)];
+      if (i == 0){
+        if((g_r == g_t) && (g_r != 0)){
+          hole_map[((y_pos)*colunas)+x_pos] = g_r;
+        }else if (g_r != g_t){
+          if ((g_r != 0) && (g_t != 0)){
+            hole_map[((y_pos)*colunas)+x_pos] = g_r;
+            push(&links, g_r, g_t);
+          }else if(g_r != 0){
+            hole_map[((y_pos)*colunas)+x_pos] = g_r;
+          }else if (g_t != 0){
+            hole_map[((y_pos)*colunas)+x_pos] = g_t;
+          }
+        }else {
+          hole_map[((y_pos)*colunas)+x_pos] = index_count;
+          index_count++;
+        }
+      }
+    }
+  }
+
+  //agrupar os grupos;
+  grupos = (unsigned int*)malloc(index_count*sizeof(unsigned int));
+  memset(grupos, 0, (index_count*sizeof(unsigned int)));
+  while(links != NULL){
+    Tupla temp = pop(&links);
+    unsigned int a = temp.a;
+    unsigned int b = temp.b;
+    if ((grupos[a]==0) && (grupos[b]==0)){
+      buracos_count++;
+      grupos[a] = buracos_count;
+      grupos[b] = buracos_count;
+    } else if((grupos[a]==0) && (grupos[b]!=0)) {
+      grupos[a] = grupos[b];
+    }else if ((grupos[b]==0) && (grupos[a]!=0)){
+      grupos[b] = grupos[a];
+    }else if (grupos[a] != grupos[b]){
+      unsigned int holder = menor(grupos[a], grupos[b]);
+      unsigned int to_change = maior(grupos[a], grupos[b]);
+      for (int i = index_count-1; i > 0; i--){
+        if (grupos[i] == to_change){
+          grupos[i] = holder;
+        }
+      }
+    }
+  }
+
+  //agrupar formas simples
+  for (int i = index_count-1; i > 0; i--){
+    if (grupos[i] == 0){
+      buracos_count++;
+      grupos[i] = buracos_count;
+    }
+  }
+
+  //PERCORRER imagem e separar as formas
+  for (y_pos = img->start_y; y_pos < img->end_y; y_pos++){
+    for (x_pos = img->start_x; x_pos < img->end_x; x_pos++){
+      unsigned int g_value = hole_map[((y_pos)*colunas)+x_pos];
+      if(g_value){
+        hole_map[((y_pos)*colunas)+x_pos]=grupos[g_value];
+      }
+    }
+  }
+
+
+
+  //garantia que existe pelo menos uma forma devido ao check no começo da função
+  buracos_count = 1;
+
+  //--contar o total de formas
+  unsigned int *grupos_cpy = (unsigned int*)malloc(index_count*sizeof(unsigned int));
+  memset(grupos_cpy, 0, (index_count*sizeof(unsigned int)));
+  //copiar array de formas.
+  for (int i = index_count-1; i > 0; i--){
+    grupos_cpy[i] = grupos[i];
+  }
+
+  //qsort() na cópia do array de grupos nos permite contar com facilidade a quantidade
+  //de elementos unicos no array o que equivale a real quantidade de formas.
+  qsort(grupos_cpy, index_count, sizeof(unsigned int), cmpfunc);
+  for (int i = 2; i < index_count; i++){
+    if (grupos_cpy[i]>grupos_cpy[i-1]){
+      buracos_count++;
+    }
+  }
+
+  //eu poderia juntar esses dois for loops em um só? sim poderia, mas não estou
+  //com um pingo de vontade usar um array que cresce durante a execução.
+  unsigned int *grupos_validos = (unsigned int*)malloc(buracos_count*sizeof(unsigned int));
+  int k = 0;
+  grupos_validos[k] = grupos_cpy[1];
+  for (int i = 2; i < index_count; i++){
+    if (grupos_cpy[i]>grupos_cpy[i-1]){
+      k++;
+      grupos_validos[k] = grupos_cpy[i];
+    }
+  }
+
+  graymap(hole_map, grupos_validos, buracos_count, colunas, "BuracosGraymap.pgm");
+
+  free(grupos);
+  free(grupos_cpy);
+  free(hole_map);
+  free(links);
+  return 0;
+}
+
 // ------------------- MAIN ----------------------------------------------------
+int main(int argc, char *argv[]) {
+  clock_t t ;
+  double elapsed_clocks;
+
+  t = clock(); //"Start clock"
+  open_img(argv[1]);//Load
+  t = clock() - t;//"Stop Clock"
+  elapsed_clocks = ((double)t)/CLOCKS_PER_SEC; //"Math"
+  printf("Load demorou: %f segundos\n", elapsed_clocks);
+  printf("-------------------------------------------\n");
+
+  t = clock(); //"Start clock"
+  find_shape(img0);
+  t = clock() - t;//"Stop Clock"
+  elapsed_clocks = ((double)t)/CLOCKS_PER_SEC; //"Math"
+  printf("Total de formas Encontradas: %d\n", formas_count);
+  printf("Busca por formas/gerar graymap demorou: %f segundos\n", elapsed_clocks);
+  printf("-------------------------------------------\n");
+
+  t = clock(); //"Start clock"
+  find_hole(img0);
+  t = clock() - t;//"Stop Clock"
+  elapsed_clocks = ((double)t)/CLOCKS_PER_SEC; //"Math"
+  printf("Total de buracos Encontrados: %d\n", buracos_count-1);
+  printf("Busca por buracos/gerar graymap demorou: %f segundos\n", elapsed_clocks);
+  printf("-------------------------------------------\n");
+
+  t = clock(); //"Start clock"
+  save_img("copia.pbm", img0, formas_count, buracos_count-1);//Save
+  t = clock() - t;//"Stop Clock"
+  elapsed_clocks = ((double)t)/CLOCKS_PER_SEC; //"Math"
+  printf("Save demorou: %f segundos\n", elapsed_clocks);
+
+  free(img0);
+  return 0;
+}
