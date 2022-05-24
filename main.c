@@ -34,6 +34,8 @@ Imagem *img0;
 unsigned int formas_count = 0;
 unsigned int buracos_count = 0;
 unsigned int formas_defeito = 0;
+unsigned int tolerancia = 0;
+// tolerancia é a quantidade máxima de buracos em uma forma para que ela seja considerada ok.
 //Shape e Hole map movidos para global para ser possivel buscar por formas com buracos_count
 unsigned int *shape_map;
 unsigned int *hole_map;
@@ -424,6 +426,7 @@ int find_shape (Imagem *img) {
   //eu poderia juntar esses dois for loops em um só? sim poderia, mas não estou
   //com um pingo de vontade usar um array que cresce durante a execução.
   grupos_validos = (unsigned int*)malloc(formas_count*sizeof(unsigned int));
+  memset(grupos_validos, 0 , formas_count*sizeof(unsigned int));
   int k = 0;
   grupos_validos[k] = grupos_cpy[1];
   for (int i = 2; i < index_count; i++){
@@ -434,13 +437,19 @@ int find_shape (Imagem *img) {
   }
 
   //ultima organização para que os grupos tenham os valores minimos
-  for (int i = index_count-1; i > 0; i--){
-    for (int j = formas_count-1; j >= 0; j--){
+  for (int i = 1; i < index_count-1; i++){
+    for (int j = 0; j < formas_count; j++){
       if (grupos[i] == grupos_validos[j]){
         grupos[i] = j+1;
       }
     }
   }
+
+  //print para verificação
+  /*for (int i = index_count-1; i > 0; i--){
+      printf("(%d->%d) ", i, grupos[i]);
+    }
+  printf("\n");*/
 
   //PERCORRER imagem e separar as formas
   for (y_pos = img->start_y; y_pos < img->end_y; y_pos++){
@@ -569,6 +578,7 @@ int find_hole (Imagem *img){
   }
 
   buracos_validos = (unsigned int*)malloc(buracos_count*sizeof(unsigned int));
+  memset(buracos_validos, 0,buracos_count*sizeof(unsigned int));
   int k = 0;
   buracos_validos[k] = grupos_cpy[1];
   for (int i = 2; i < index_count; i++){
@@ -580,15 +590,15 @@ int find_hole (Imagem *img){
 
   //ultima organização para que os grupos tenham os valores minimos
   for (int i = index_count-1; i > 0; i--){
-    for (int j = buracos_count-1; j >= 0; j--){
+    for (int j = buracos_count; j >= 0; j--){
       if (grupos[i] == buracos_validos[j]){
         grupos[i] = j+1;
       }
     }
   }
 
-  /*print para verificação
-  for (int i = index_count-1; i > 0; i--){
+  //print para verificação
+  /*for (int i = index_count-1; i > 0; i--){
       printf("(%d->%d) ", i, grupos[i]);
     }
   printf("\n");*/
@@ -636,10 +646,12 @@ int find_defects (unsigned int *holes, unsigned int *shapes){
   for (y_pos = img0->start_y; y_pos < img0->end_y; y_pos++){
     for (x_pos = img0->start_x; x_pos < img0->end_x; x_pos++){
      unsigned int g_val = shapes[((y_pos)*colunas)+x_pos];
-     unsigned int h_val = holes[((y_pos)*colunas)+x_pos-1];
+     unsigned int h1_val = holes[((y_pos)*colunas)+x_pos-1];
+     unsigned int h2_val = holes[((y_pos-1)*colunas)+x_pos];
 
-     if ((g_val != 0) && (h_val != 0)){
-       defect_map[(h_val*(formas_count+1))+g_val] = 1;
+     if (g_val != 0){
+       if (h2_val != 0){defect_map[(h2_val*(formas_count+1))+g_val] = 1;}
+       else if (h1_val != 0){defect_map[(h1_val*(formas_count+1))+g_val] = 1;}
      }
     }
   }
@@ -648,18 +660,19 @@ int find_defects (unsigned int *holes, unsigned int *shapes){
   for (int i = 1; i < (formas_count+1); i++){
     int k = 0;
     for (int j = 1; j < (buracos_count+1); j++){
-      //printf("%d | ", defect_map[(j*(formas_count+1))+i]);
+      printf("%d | ", defect_map[(j*(formas_count+1))+i]);
       if (defect_map[(j*(formas_count+1))+i]){
         k++;
       }
-      if (k > 1){
+      //para aumentar a tolerancia modifique a variavel no inicio do código
+      if (k > tolerancia+1){
         formas_defeito++;
         break;
       }
     }
-    //printf("\n" );
+    printf("\n" );
   }
-
+  free(defect_map);
   return 0;
 }
 // ------------------- MAIN ----------------------------------------------------
