@@ -29,11 +29,14 @@ typedef struct{
 
 typedef struct stack Stack;
 typedef Stack *stackPtr;
-// start e end são para as operações trabalharem apenas sobre a Imagem e não terem que percorrer a borda
+
 Imagem *img0;
 unsigned int formas_count = 0;
 unsigned int buracos_count = 0;
-// start e end são para as operações trabalharem apenas sobre a Imagem e não terem que percorrer a borda
+unsigned int formas_defeito = 0;
+//Shape e Hole map movidos para global para ser possivel buscar por formas com buracos_count
+unsigned int *shape_map;
+unsigned int *hole_map;
 // ------------------- FUNÇÔES -------------------------------------------------
 unsigned int menor (unsigned int a, unsigned int b){
   if (a <= b){
@@ -247,7 +250,7 @@ Tupla pop(stackPtr *top){
   return tp;
 }
 
-int graymap (unsigned int *map, unsigned int *g_valido, int tons, unsigned int colunas, char *file_name){
+int graymap (unsigned int *map, int tons, unsigned int colunas, char *file_name){
 
   if (tons > 255){
     printf("Mais de 255 formas encontradas, não foi possivel gerar graymap\n");
@@ -259,7 +262,7 @@ int graymap (unsigned int *map, unsigned int *g_valido, int tons, unsigned int c
   tone_map = (unsigned int*)malloc(tons*2*sizeof(unsigned int));
 
   for (int i = 0; i < tons; i++){
-    tone_map[2*i] = g_valido[i];
+    tone_map[2*i] = i;
     tone_map[(2*i)+1] = 1+(i*intervalo);
     //printf("(%d->%d)\n",tone_map[2*i], tone_map[(2*i)+1] );
   }
@@ -313,9 +316,10 @@ int find_shape (Imagem *img) {
   unsigned int index_count = 1;
   unsigned int colunas = img->size_x + 2;
   unsigned int linhas = img->size_y + 2;
-  unsigned int *shape_map;
+  //unsigned int *shape_map;
   stackPtr links = NULL;
   unsigned int *grupos;
+  unsigned int *grupos_validos;
   printf("Formas\n");
 
   shape_map = (unsigned int*)malloc(linhas * colunas * sizeof(unsigned int));
@@ -397,18 +401,6 @@ int find_shape (Imagem *img) {
     }
   }
 
-  //PERCORRER imagem e separar as formas
-  for (y_pos = img->start_y; y_pos < img->end_y; y_pos++){
-    for (x_pos = img->start_x; x_pos < img->end_x; x_pos++){
-      unsigned int g_value = shape_map[((y_pos)*colunas)+x_pos];
-      if(g_value){
-        shape_map[((y_pos)*colunas)+x_pos]=grupos[g_value];
-      }
-    }
-  }
-
-
-
   //garantia que existe pelo menos uma forma devido ao check no começo da função
   formas_count = 1;
 
@@ -431,7 +423,7 @@ int find_shape (Imagem *img) {
 
   //eu poderia juntar esses dois for loops em um só? sim poderia, mas não estou
   //com um pingo de vontade usar um array que cresce durante a execução.
-  unsigned int *grupos_validos = (unsigned int*)malloc(formas_count*sizeof(unsigned int));
+  grupos_validos = (unsigned int*)malloc(formas_count*sizeof(unsigned int));
   int k = 0;
   grupos_validos[k] = grupos_cpy[1];
   for (int i = 2; i < index_count; i++){
@@ -441,110 +433,31 @@ int find_shape (Imagem *img) {
     }
   }
 
-  graymap(shape_map, grupos_validos, formas_count, colunas, "FormasGraymap.pgm");
-
-  free(grupos);
-  free(grupos_cpy);
-  free(shape_map);
-  free(links);
-  return 0;
-}
-
-int find_hole_bkp (Imagem *img) {
-  unsigned int x_pos;
-  unsigned int y_pos;
-  unsigned int index_count = 1;
-  unsigned int colunas = img->size_x + 2;
-  unsigned int linhas = img->size_y + 2;
-  unsigned int *hole_map;
-  stackPtr links = NULL;
-  unsigned int *grupos;
-  printf("Buracos: \n");
-
-  hole_map = (unsigned int*)malloc(linhas * colunas * sizeof(unsigned int));
-  memset(hole_map, 0, (linhas*colunas*sizeof(unsigned int)));
-
-  //varrendo a imagem e agrupando os espaços vazios
-  for (y_pos = img->start_y; y_pos < img->end_y; y_pos++){
-    for (x_pos = img->start_x; x_pos < img->end_x; x_pos++){
-      unsigned int i = TestBit(img->data, ((y_pos*img->line_size*32) + x_pos));
-      unsigned int g_r = hole_map[((y_pos-1)*colunas)+x_pos];
-      unsigned int g_t = hole_map[((y_pos)*colunas)+(x_pos-1)];
-
-      //Novo loop para a busca de 0s.
-      if (i == 0){
-        if((g_r == g_t) && (g_r != 0)){
-          hole_map[((y_pos)*colunas)+x_pos] = g_r;
-        }else if (g_r != g_t){
-          if ((g_r != 0) && (g_t != 0)){
-            hole_map[((y_pos)*colunas)+x_pos] = menor(g_r, g_t);
-            push(&links, menor(g_r, g_t), maior(g_r, g_t));
-          }else if(g_r != 0){
-            hole_map[((y_pos)*colunas)+x_pos] = g_r;
-          }else if (g_t != 0){
-            hole_map[((y_pos)*colunas)+x_pos] = g_t;
-          }
-        }else {
-          hole_map[((y_pos)*colunas)+x_pos] = index_count;
-          index_count++;
-        }
+  //ultima organização para que os grupos tenham os valores minimos
+  for (int i = index_count-1; i > 0; i--){
+    for (int j = formas_count-1; j >= 0; j--){
+      if (grupos[i] == grupos_validos[j]){
+        grupos[i] = j+1;
       }
     }
   }
 
-  //converter pilha em vetor de associados
-  grupos = (unsigned int*)malloc(index_count* sizeof(unsigned int));
-  memset(grupos, 0, (index_count*sizeof(unsigned int)));
-  while (links != NULL) {
-    Tupla t_temp;
-    t_temp = pop(&links);
-    grupos [t_temp.b] = t_temp.a;
-  }
-
-  //Print das correlações dos grupos
-  /*
-  for (int i = index_count-1; i > 0; i--){
-    printf("(%d->%d)", i, grupos[i]);
-  }
-  printf("\n");
-  */
-
-  //reorganizar grupos
-  for (int i = index_count-1; i > 0; i-- ){
-    unsigned int associado = grupos[i];
-    unsigned int last_associado = grupos[i];
-    while (associado){
-      last_associado = associado;
-      associado = grupos[associado];
-    }
-    grupos[i]=last_associado;
-    if (!grupos[i]){
-      buracos_count++;
-      //printf("%d - ", i);
-    }
-  }
-  //printf("\n");
-
-  //ler o vetor de associados e alterar os valores em hole_map
+  //PERCORRER imagem e separar as formas
   for (y_pos = img->start_y; y_pos < img->end_y; y_pos++){
     for (x_pos = img->start_x; x_pos < img->end_x; x_pos++){
-      unsigned int g_value = hole_map[(y_pos*colunas)+x_pos];
-        if (grupos[g_value]){
-          hole_map[(y_pos*colunas)+x_pos] = grupos[g_value];
-        }
-      //printf("%d ",hole_map[(y_pos*colunas)+x_pos]);
+      unsigned int g_value = shape_map[((y_pos)*colunas)+x_pos];
+      if(g_value){
+        shape_map[((y_pos)*colunas)+x_pos]=grupos[g_value];
+      }
     }
-    //printf("\n");
   }
 
-  //Print da tabela de associação final
-  /*for (int i = index_count-1; i > 0; i--){
-    printf("(%d->%d)", i, grupos[i]);
-  }
-  printf("\n");*/
+  graymap(shape_map, formas_count, colunas, "FormasGraymap.pgm");
 
-  free(hole_map);
   free(grupos);
+  free(grupos_cpy);
+  free(grupos_validos);
+  //free(shape_map);
   free(links);
   return 0;
 }
@@ -555,9 +468,10 @@ int find_hole (Imagem *img){
   unsigned int index_count = 1;
   unsigned int colunas = img->size_x + 2;
   unsigned int linhas = img->size_y + 2;
-  unsigned int *hole_map;
+  //unsigned int *hole_map;
   stackPtr links = NULL;
   unsigned int *grupos;
+  unsigned int *buracos_validos;
   printf("Buracos\n");
 
   hole_map = (unsigned int*)malloc(linhas * colunas * sizeof(unsigned int));
@@ -634,18 +548,6 @@ int find_hole (Imagem *img){
     }
   }
 
-  //PERCORRER imagem e separar as formas
-  for (y_pos = img->start_y; y_pos < img->end_y; y_pos++){
-    for (x_pos = img->start_x; x_pos < img->end_x; x_pos++){
-      unsigned int g_value = hole_map[((y_pos)*colunas)+x_pos];
-      if(g_value){
-        hole_map[((y_pos)*colunas)+x_pos]=grupos[g_value];
-      }
-    }
-  }
-
-
-
   //garantia que existe pelo menos uma forma devido ao check no começo da função
   buracos_count = 1;
 
@@ -658,7 +560,7 @@ int find_hole (Imagem *img){
   }
 
   //qsort() na cópia do array de grupos nos permite contar com facilidade a quantidade
-  //de elementos unicos no array o que equivale a real quantidade de formas.
+  //de elementos unicos no array o que equivale a real quantidade de buracos.
   qsort(grupos_cpy, index_count, sizeof(unsigned int), cmpfunc);
   for (int i = 2; i < index_count; i++){
     if (grupos_cpy[i]>grupos_cpy[i-1]){
@@ -666,27 +568,100 @@ int find_hole (Imagem *img){
     }
   }
 
-  //eu poderia juntar esses dois for loops em um só? sim poderia, mas não estou
-  //com um pingo de vontade usar um array que cresce durante a execução.
-  unsigned int *grupos_validos = (unsigned int*)malloc(buracos_count*sizeof(unsigned int));
+  buracos_validos = (unsigned int*)malloc(buracos_count*sizeof(unsigned int));
   int k = 0;
-  grupos_validos[k] = grupos_cpy[1];
+  buracos_validos[k] = grupos_cpy[1];
   for (int i = 2; i < index_count; i++){
     if (grupos_cpy[i]>grupos_cpy[i-1]){
       k++;
-      grupos_validos[k] = grupos_cpy[i];
+      buracos_validos[k] = grupos_cpy[i];
     }
   }
 
-  graymap(hole_map, grupos_validos, buracos_count, colunas, "BuracosGraymap.pgm");
+  //ultima organização para que os grupos tenham os valores minimos
+  for (int i = index_count-1; i > 0; i--){
+    for (int j = buracos_count-1; j >= 0; j--){
+      if (grupos[i] == buracos_validos[j]){
+        grupos[i] = j+1;
+      }
+    }
+  }
+
+  /*print para verificação
+  for (int i = index_count-1; i > 0; i--){
+      printf("(%d->%d) ", i, grupos[i]);
+    }
+  printf("\n");*/
+
+  //PERCORRER imagem e separar as formas
+  for (y_pos = img->start_y; y_pos < img->end_y; y_pos++){
+    for (x_pos = img->start_x; x_pos < img->end_x; x_pos++){
+      unsigned int g_value = hole_map[((y_pos)*colunas)+x_pos];
+      if(g_value){
+        hole_map[((y_pos)*colunas)+x_pos]=grupos[g_value];
+      }
+    }
+  }
+
+  graymap(hole_map, buracos_count, colunas, "BuracosGraymap.pgm");
 
   free(grupos);
   free(grupos_cpy);
-  free(hole_map);
+  free(buracos_validos);
+  //free(hole_map);
   free(links);
   return 0;
 }
 
+int find_defects (unsigned int *holes, unsigned int *shapes){
+  unsigned int x_pos;
+  unsigned int y_pos;
+  unsigned int colunas = img0->size_x + 2;
+  printf("Formas com Defeitos \n");
+  /* O método de busca utilizado será:
+  1 - carregar as listas e mapas e de buacos e formas validas;
+  2 - gerar uma matrix x*y onde X é o número de formas e y o número de buracos,
+  3 - sempre que houver contato entre um grupo e um buraco, o ponto x,y da matriz será marcado
+  4 - após toda a imagem ser percorrida a matriz final indicará quais grupos e quis buracos se tocam,
+  5 - o buraco que tocar todos os fundos é o background e cada buraco deve tocar apenas uma forma
+      mas uma forma pode ter multiplos buracos.
+  */
+
+  //+1 que é adicionado permite alinhas cada grupo de formas e buracos com o seu index na matriz
+  //desperdiçamos um pouco de memoria (uma linha e uma coluna), mas isso nos permite remover
+  //dois for loops para percorrer as formas validadas e os buracos válidos.
+  unsigned int *defect_map = (unsigned int*)malloc((formas_count+1)*(buracos_count+1)*sizeof(unsigned int));
+  memset(defect_map, 0, ((formas_count+1)*(buracos_count+1)*sizeof(unsigned int)));
+
+  for (y_pos = img0->start_y; y_pos < img0->end_y; y_pos++){
+    for (x_pos = img0->start_x; x_pos < img0->end_x; x_pos++){
+     unsigned int g_val = shapes[((y_pos)*colunas)+x_pos];
+     unsigned int h_val = holes[((y_pos)*colunas)+x_pos-1];
+
+     if ((g_val != 0) && (h_val != 0)){
+       defect_map[(h_val*(formas_count+1))+g_val] = 1;
+     }
+    }
+  }
+  // i e j inicaim em 1 para pular o padding adicionado anterirormente
+  //para gerar a tabela de peças com buracos por favor remover o // das linhas printf abaixo
+  for (int i = 1; i < (formas_count+1); i++){
+    int k = 0;
+    for (int j = 1; j < (buracos_count+1); j++){
+      //printf("%d | ", defect_map[(j*(formas_count+1))+i]);
+      if (defect_map[(j*(formas_count+1))+i]){
+        k++;
+      }
+      if (k > 1){
+        formas_defeito++;
+        break;
+      }
+    }
+    //printf("\n" );
+  }
+
+  return 0;
+}
 // ------------------- MAIN ----------------------------------------------------
 int main(int argc, char *argv[]) {
   clock_t t ;
@@ -716,11 +691,22 @@ int main(int argc, char *argv[]) {
   printf("-------------------------------------------\n");
 
   t = clock(); //"Start clock"
+  find_defects(hole_map, shape_map);
+  t = clock() - t;//"Stop Clock"
+  elapsed_clocks = ((double)t)/CLOCKS_PER_SEC; //"Math"
+  printf("Total de peças com defeito: %d\n", formas_defeito);
+  printf("Busca por peças com defeito demororu: %f segundos\n", elapsed_clocks);
+
+  printf("-------------------------------------------\n");
+
+  t = clock(); //"Start clock"
   save_img("copia.pbm", img0, formas_count, buracos_count-1);//Save
   t = clock() - t;//"Stop Clock"
   elapsed_clocks = ((double)t)/CLOCKS_PER_SEC; //"Math"
   printf("Save demorou: %f segundos\n", elapsed_clocks);
 
+  free(shape_map);
+  free(hole_map);
   free(img0);
   return 0;
 }

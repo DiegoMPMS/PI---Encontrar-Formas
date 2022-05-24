@@ -28,21 +28,27 @@ LOAD
 X: 3000 -- Y: 3000
 line size = 94
 total img size = 282188 integers
-Load demorou: 0.120569 segundos
+Load demorou: 0.113480 segundos
 -------------------------------------------
 Formas
-Total de formas Encontradas: 10
-Busca por formas/gerar graymap demorou: 1.637288 segundos
+Total de formas Encontradas: 8
+Busca por formas/gerar graymap demorou: 1.569558 segundos
 -------------------------------------------
 Buracos
 Total de buracos Encontrados: 15
-Busca por buracos/gerar graymap demorou: 1.907947 segundos
+Busca por buracos/gerar graymap demorou: 1.922716 segundos
+-------------------------------------------
+Formas com Defeitos
+Total de peças com defeito: 8
+Busca por peças com defeito demororu: 0.107182 segundos
 -------------------------------------------
 SAVE
-Save demorou: 0.158207 segundos
+Save demorou: 0.138473 segundos
+
 ```
-Nele é possível ver 4 seções, a primeira dá informações sobre a imagem original,
+Nele é possível ver 5 seções, a primeira dá informações sobre a imagem original,
 a segunda mostra o total de formas encontradas, a terceira mostra o total de buracos,
+a quarta mostra o número de peças com buracos (peças com defeito),
 e a última mostra que a cópia da imagem foi feita com sucesso.
 
 Cada uma das 4 portes também contem o tempo gasto para executar
