@@ -660,7 +660,7 @@ int find_defects (unsigned int *holes, unsigned int *shapes){
   for (int i = 1; i < (formas_count+1); i++){
     int k = 0;
     for (int j = 1; j < (buracos_count+1); j++){
-      printf("%d | ", defect_map[(j*(formas_count+1))+i]);
+      //printf("%d | ", defect_map[(j*(formas_count+1))+i]);
       if (defect_map[(j*(formas_count+1))+i]){
         k++;
       }
@@ -670,7 +670,7 @@ int find_defects (unsigned int *holes, unsigned int *shapes){
         break;
       }
     }
-    printf("\n" );
+    //printf("\n" );
   }
   free(defect_map);
   return 0;
